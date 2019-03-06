@@ -17,31 +17,39 @@ Check if a string contains one of the needles:
 
 ```haskell
 import qualified Data.Text.AhoCorasick.Searcher as Searcher
+
 searcher = Searcher.build ["tshirt", "shirts", "shorts"]
+
 Searcher.containsAny searcher "short tshirts"
 > True
+
 Searcher.containsAny searcher "long shirt"
 > False
+
 Searcher.containsAny searcher "Short TSHIRTS"
 > False
+
 Searcher.containsAnyIgnoreCase searcher "Short TSHIRTS"
 > True
 ```
 
-Sequentally replace many needles:
+Sequentially replace many needles:
 
 ```haskell
 import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
 import qualified Data.Text.AhoCorasick.Replacer as Replacer
+
 replacer = Replacer.build CaseSensitive [("tshirt", "banana"), ("shirt", "pear")]
+
 Replacer.run replacer "tshirts for sale"
 > "bananas for sale"
+
 Replacer.run replacer "tshirts and shirts for sale"
 > "bananas and pears for sale"
+
 Replacer.run replacer "sweatshirts and shirtshirts"
 > "sweabananas and shirbananas"
-Replacer.run replacer "sweatshirts and shirtshirts"
-> "sweabananas and shirbananas"
+
 Replacer.run replacer "sweatshirts and shirttshirts"
 > "sweabananas and pearbananas"
 ```
