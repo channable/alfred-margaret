@@ -16,8 +16,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Data.Text.AhoCorasick
-                     , Data.Text.AhoCorasick.Automaton
+  exposed-modules:     Data.Text.AhoCorasick.Automaton
                      , Data.Text.AhoCorasick.Searcher
                      , Data.Text.AhoCorasick.Replacer
   build-depends:       base >= 4.7 && < 5
