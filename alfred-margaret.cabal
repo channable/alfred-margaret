@@ -14,6 +14,10 @@ build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
 
+source-repository head
+  type:     git
+  location: https://github.com/channable/alfred-margaret
+
 library
   hs-source-dirs:      src
   exposed-modules:     Data.Text.AhoCorasick.Automaton
@@ -26,8 +30,20 @@ library
                      , primitive
                      , text
                      , vector
+  ghc-options:         -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
   default-language:    Haskell2010
 
-source-repository head
-  type:     git
-  location: https://github.com/channable/alfred-margaret
+test-suite test-suite
+  type:                exitcode-stdio-1.0
+  main-is:             AhoCorasickSpec.hs
+  hs-source-dirs:      tests
+  ghc-options:         -Wall -Wincomplete-record-updates -Wno-orphans
+  build-depends:       base >= 4.7 && < 5
+                     , QuickCheck
+                     , alfred-margaret
+                     , deepseq
+                     , hspec
+                     , hspec-expectations
+                     , quickcheck-instances
+                     , text
+  default-language:    Haskell2010
