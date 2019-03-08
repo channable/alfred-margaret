@@ -486,9 +486,9 @@ runWithCase caseSensitivity seed f machine text =
         matchedValues = values `at` state
         -- Fold over the matched values. If at any point the user-supplied fold
         -- function returns `Done`, then we early out. Otherwise continue.
-        handleMatch !a vs = case vs of
-          []     -> consumeInput offset remaining acc state
-          v:more -> case f a (Match (CodeUnitIndex $ offset - initialOffset) v) of
+        handleMatch !acc' vs = case vs of
+          []     -> consumeInput offset remaining acc' state
+          v:more -> case f acc' (Match (CodeUnitIndex $ offset - initialOffset) v) of
             Step newAcc -> handleMatch newAcc more
             Done finalAcc -> finalAcc
       in

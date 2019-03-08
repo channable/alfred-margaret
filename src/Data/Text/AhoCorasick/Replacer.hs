@@ -156,14 +156,13 @@ removeOverlap matches = case matches of
 -- match, so we can exclude matches if we already did a round of replacements
 -- for that priority. This way we don't have to build a new automaton after
 -- every round of replacements.
-{-# INLINE onMatch #-}
-onMatch :: Priority -> (Priority, [Match]) -> Aho.Match Payload -> Aho.Next (Priority, [Match])
-onMatch !threshold (!pBest, !matches) (Aho.Match pos (Payload pMatch len replacement))
+{-# INLINE prependMatch #-}
+prependMatch :: Priority -> (Priority, [Match]) -> Aho.Match Payload -> Aho.Next (Priority, [Match])
+prependMatch !threshold (!pBest, !matches) (Aho.Match pos (Payload pMatch len replacement))
   | pMatch < threshold && pMatch >  pBest = Aho.Step (pMatch, [Match (pos - len) len replacement])
   | pMatch < threshold && pMatch == pBest = Aho.Step (pMatch, (Match (pos - len) len replacement) : matches)
   | otherwise = Aho.Step (pBest, matches)
 
-{-# NOINLINE run #-}
 run :: Replacer -> Text -> Text
 run replacer = fromJust . runWithLimit replacer maxBound
 
@@ -188,8 +187,8 @@ runWithLimit (Replacer case_ searcher) maxLength = go initialThreshold
       let
         seed = (minBound :: Priority, [])
         matchesWithPriority = case case_ of
-          CaseSensitive -> Aho.runText seed (onMatch threshold) automaton haystack
-          IgnoreCase -> Aho.runLower seed (onMatch threshold) automaton haystack
+          CaseSensitive -> Aho.runText seed (prependMatch threshold) automaton haystack
+          IgnoreCase -> Aho.runLower seed (prependMatch threshold) automaton haystack
       in
         case matchesWithPriority of
           -- No match at the given threshold, there is nothing left to do.

@@ -45,7 +45,8 @@ needleIsHaystackMatches needle =
   let
     needleUtf16 = Aho.unpackUtf16 needle
     len = Aho.lengthUtf16 needle
-    matches = Aho.runText (Aho.build [(needleUtf16, ())]) needle
+    prependMatch ms match = Aho.Step (match : ms)
+    matches = Aho.runText [] prependMatch (Aho.build [(needleUtf16, ())]) needle
   in
     matches `shouldBe` [Aho.Match len ()]
 
@@ -54,8 +55,9 @@ ahoMatch needles haystack =
   let
     makeNeedle (text, value) = (Aho.unpackUtf16 text, value)
     needlesUtf16 = fmap makeNeedle needles
+    prependMatch matches match = Aho.Step (match : matches)
   in
-    Aho.runText (Aho.build needlesUtf16) haystack
+    Aho.runText [] prependMatch (Aho.build needlesUtf16) haystack
 
 -- | Match without a payload, return only the match positions.
 matchPositions :: [Text] -> Text -> [Int]
