@@ -442,6 +442,10 @@ runWithCase caseSensitivity seed f machine text =
 
     -- NOTE: All of the arguments are strict here, because we want to compile
     -- them down to unpacked variables on the stack, or even registers.
+    -- The INLINE / NOINLINE annotations here were added to fix a regression we
+    -- observed when going from GHC 8.2 to GHC 8.6, and this particular
+    -- combination of INLINE and NOINLINE is the fastest one. Removing increases
+    -- the benchmark running time by about 9%.
 
     {-# NOINLINE consumeInput #-}
     consumeInput :: Int -> Int -> a -> State -> a
