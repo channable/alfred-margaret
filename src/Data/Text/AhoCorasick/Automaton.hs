@@ -413,8 +413,8 @@ uAt = UVector.unsafeIndex
 -- | Result of handling a match: stepping the automaton can exit early by
 -- returning a `Done`, or it can continue with a new accumulator with `Step`.
 data Next a
-  = Done a
-  | Step a
+  = Done !a
+  | Step !a
 
 -- | Run the automaton, possibly lowercasing the input text on the fly if case
 -- insensitivity is desired. See also `lowerCodeUnit` and `runLower`.
