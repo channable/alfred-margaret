@@ -441,10 +441,7 @@ runWithCase caseSensitivity seed f machine text =
     !stateInitial = 0
 
     -- NOTE: All of the arguments are strict here, because we want to compile
-    -- them down to unpacked variables on the stack, or even registers, apart
-    -- from the list of matches. It is deliberately lazy, to allow GHC to
-    -- eliminate the list construction, if we immediately traverse it. This
-    -- makes more than a 10% difference in the match counting benchmark.
+    -- them down to unpacked variables on the stack, or even registers.
 
     {-# NOINLINE consumeInput #-}
     consumeInput :: Int -> Int -> a -> State -> a
