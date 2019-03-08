@@ -44,6 +44,7 @@ module Data.Text.AhoCorasick.Automaton
   , CodeUnit
   , CodeUnitIndex (..)
   , Match (..)
+  , Next (..)
   , lengthUtf16
   , lowerUtf16
   , unpackUtf16
@@ -409,6 +410,12 @@ at = Vector.unsafeIndex
 uAt :: forall a. UVector.Unbox a => UVector.Vector a -> Int -> a
 uAt = UVector.unsafeIndex
 
+-- | Result of handling a match: stepping the automaton can exit early by
+-- returning a `Done`, or it can continue with a new accumulator with `Step`.
+data Next a
+  = Done a
+  | Step a
+
 -- | Run the automaton, possibly lowercasing the input text on the fly if case
 -- insensitivity is desired. See also `lowerCodeUnit` and `runLower`.
 -- WARNING: Run benchmarks when modifying this function; its performance is
@@ -416,8 +423,15 @@ uAt = UVector.unsafeIndex
 -- to fast code; removing the wrong bang pattern could cause a 10% performance
 -- regression.
 {-# INLINE runWithCase #-}
-runWithCase :: forall v. CaseSensitivity -> AcMachine v -> Text -> [Match v]
-runWithCase caseSensitivity machine text =
+runWithCase
+  :: forall a v
+  .  CaseSensitivity
+  -> a
+  -> (a -> Match v -> Next a)
+  -> AcMachine v
+  -> Text
+  -> a
+runWithCase caseSensitivity seed f machine text =
   let
     Text u16data !initialOffset !initialRemaining = text
     !values = machineValues machine
@@ -432,8 +446,9 @@ runWithCase caseSensitivity machine text =
     -- eliminate the list construction, if we immediately traverse it. This
     -- makes more than a 10% difference in the match counting benchmark.
 
-    consumeInput :: Int -> Int -> [Match v] -> State -> [Match v]
-    consumeInput !offset !remaining matches !state =
+    {-# NOINLINE consumeInput #-}
+    consumeInput :: Int -> Int -> a -> State -> a
+    consumeInput !offset !remaining !acc !state =
       let
         inputCodeUnit = fromIntegral $ TextArray.unsafeIndex u16data offset
         -- NOTE: Although doing this match here entangles the automaton a bit
@@ -444,11 +459,12 @@ runWithCase caseSensitivity machine text =
           CaseSensitive -> inputCodeUnit
       in
         case remaining of
-          0 -> matches
-          _ -> followEdge (offset + 1) (remaining - 1) matches state casedCodeUnit
+          0 -> acc
+          _ -> followEdge (offset + 1) (remaining - 1) acc state casedCodeUnit
 
-    followEdge :: Int -> Int -> [Match v] -> State -> CodeUnit -> [Match v]
-    followEdge !offset !remaining matches !state !input =
+    {-# INLINE followEdge #-}
+    followEdge :: Int -> Int -> a -> State -> CodeUnit -> a
+    followEdge !offset !remaining !acc !state !input =
       let
         !tssOffset = offsets `uAt` state
       in
@@ -460,54 +476,62 @@ runWithCase caseSensitivity machine text =
         -- up a bit more space, but provides O(1) lookup of the next state. We
         -- only do this for the first 128 code units (all of ascii).
         if state == stateInitial && input < asciiCount
-          then lookupRootAsciiTransition offset remaining matches input
-          else lookupTransition offset remaining matches state input tssOffset
+          then lookupRootAsciiTransition offset remaining acc input
+          else lookupTransition offset remaining acc state input tssOffset
 
-    collectMatches :: Int -> Int -> [Match v] -> State -> [Match v]
-    collectMatches !offset !remaining matches !state =
+    {-# NOINLINE collectMatches #-}
+    collectMatches :: Int -> Int -> a -> State -> a
+    collectMatches !offset !remaining !acc !state =
       let
         matchedValues = values `at` state
-        prependMatch !ms v = (Match (CodeUnitIndex $ offset - initialOffset) v) : ms
-        newMatches = foldl' prependMatch matches matchedValues
+        -- Fold over the matched values. If at any point the user-supplied fold
+        -- function returns `Done`, then we early out. Otherwise continue.
+        handleMatch !a vs = case vs of
+          []     -> consumeInput offset remaining acc state
+          v:more -> case f a (Match (CodeUnitIndex $ offset - initialOffset) v) of
+            Step newAcc -> handleMatch newAcc more
+            Done finalAcc -> finalAcc
       in
-        consumeInput offset remaining newMatches state
+        handleMatch acc matchedValues
 
     -- NOTE: there is no `state` argument here, because this case applies only
     -- to the root state `stateInitial`.
-    lookupRootAsciiTransition :: Int -> Int -> [Match v] -> CodeUnit -> [Match v]
-    lookupRootAsciiTransition !offset !remaining matches !input =
+    {-# INLINE lookupRootAsciiTransition #-}
+    lookupRootAsciiTransition :: Int -> Int -> a -> CodeUnit -> a
+    lookupRootAsciiTransition !offset !remaining !acc !input =
       case rootAsciiTransitions `uAt` fromIntegral input of
-        t | transitionIsWildcard t -> consumeInput offset remaining matches stateInitial
-          | otherwise -> collectMatches offset remaining matches (transitionState t)
+        t | transitionIsWildcard t -> consumeInput offset remaining acc stateInitial
+          | otherwise -> collectMatches offset remaining acc (transitionState t)
 
-    lookupTransition :: Int -> Int -> [Match v] -> State -> CodeUnit -> Int -> [Match v]
-    lookupTransition !offset !remaining matches !state !input !i =
+    {-# INLINE lookupTransition #-}
+    lookupTransition :: Int -> Int -> a -> State -> CodeUnit -> Int -> a
+    lookupTransition !offset !remaining !acc !state !input !i =
       case transitions `uAt` i of
         -- There is no transition for the given input. Follow the fallback edge,
         -- and try again from that state, etc. If we are in the base state
         -- already, then nothing matched, so move on to the next input.
         t | transitionIsWildcard t ->
               if state == stateInitial
-                then consumeInput offset remaining matches state
-                else followEdge offset remaining matches (transitionState t) input
+                then consumeInput offset remaining acc state
+                else followEdge offset remaining acc (transitionState t) input
 
         -- We found the transition, switch to that new state, collecting matches.
         -- NOTE: This comes after wildcard checking, because the code unit of
         -- the wildcard transition is 0, which is a valid input.
         t | transitionCodeUnit t == input ->
-              collectMatches offset remaining matches (transitionState t)
+              collectMatches offset remaining acc (transitionState t)
 
         -- The transition we inspected is not for the current input, and it is not
         -- a wildcard either; look at the next transition then.
-        _ -> lookupTransition offset remaining matches state input (i + 1)
+        _ -> lookupTransition offset remaining acc state input (i + 1)
   in
-    consumeInput initialOffset initialRemaining [] stateInitial
+    consumeInput initialOffset initialRemaining seed stateInitial
 
 -- NOTE: To get full advantage of inlining this function, you probably want to
 -- compile the compiling module with -fllvm and the same optimization flags as
 -- this module.
 {-# INLINE runText #-}
-runText :: forall v. AcMachine v -> Text -> [Match v]
+runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runText = runWithCase CaseSensitive
 
 -- Finds all matches in the lowercased text. This function lowercases the text
@@ -521,7 +545,7 @@ runText = runWithCase CaseSensitive
 -- compile the compiling module with -fllvm and the same optimization flags as
 -- this module.
 {-# INLINE runLower #-}
-runLower :: forall v. AcMachine v -> Text -> [Match v]
+runLower :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runLower = runWithCase IgnoreCase
 
 -- | Return a Text as a list of UTF-16 code units.

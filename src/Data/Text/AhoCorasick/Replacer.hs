@@ -25,7 +25,6 @@ module Data.Text.AhoCorasick.Replacer
   ) where
 
 import Control.DeepSeq (NFData)
-import Data.Foldable (foldl')
 import Data.Hashable (Hashable)
 import Data.List (sort)
 import Data.Maybe (fromJust)
@@ -157,16 +156,12 @@ removeOverlap matches = case matches of
 -- match, so we can exclude matches if we already did a round of replacements
 -- for that priority. This way we don't have to build a new automaton after
 -- every round of replacements.
-highestPriorityMatches :: Priority -> [Aho.Match Payload] -> (Priority, [Match])
-highestPriorityMatches !threshold = foldl' prependMatch seed
-  where
-    seed = (minBound :: Priority, [])
-
-    prependMatch :: (Priority, [Match]) -> Aho.Match Payload -> (Priority, [Match])
-    prependMatch (!pBest, !matches) (Aho.Match pos (Payload pMatch len replacement))
-      | pMatch < threshold && pMatch >  pBest = (pMatch, [Match (pos - len) len replacement])
-      | pMatch < threshold && pMatch == pBest = (pMatch, (Match (pos - len) len replacement) : matches)
-      | otherwise = (pBest, matches)
+{-# INLINE onMatch #-}
+onMatch :: Priority -> (Priority, [Match]) -> Aho.Match Payload -> Aho.Next (Priority, [Match])
+onMatch !threshold (!pBest, !matches) (Aho.Match pos (Payload pMatch len replacement))
+  | pMatch < threshold && pMatch >  pBest = Aho.Step (pMatch, [Match (pos - len) len replacement])
+  | pMatch < threshold && pMatch == pBest = Aho.Step (pMatch, (Match (pos - len) len replacement) : matches)
+  | otherwise = Aho.Step (pBest, matches)
 
 {-# NOINLINE run #-}
 run :: Replacer -> Text -> Text
@@ -191,11 +186,12 @@ runWithLimit (Replacer case_ searcher) maxLength = go initialThreshold
     go :: Priority -> Text -> Maybe Text
     go !threshold haystack =
       let
-        rawMatches = case case_ of
-          CaseSensitive -> Aho.runText automaton haystack
-          IgnoreCase -> Aho.runLower automaton haystack
+        seed = (minBound :: Priority, [])
+        matchesWithPriority = case case_ of
+          CaseSensitive -> Aho.runText seed (onMatch threshold) automaton haystack
+          IgnoreCase -> Aho.runLower seed (onMatch threshold) automaton haystack
       in
-        case highestPriorityMatches threshold rawMatches of
+        case matchesWithPriority of
           -- No match at the given threshold, there is nothing left to do.
           -- Return the input string unmodified.
           (_, []) -> Just haystack

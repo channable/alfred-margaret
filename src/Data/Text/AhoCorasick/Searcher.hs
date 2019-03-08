@@ -107,10 +107,20 @@ automaton = searcherAutomaton
 -- is a defence against fragile optimizer decisions.
 {-# NOINLINE containsAny #-}
 containsAny :: Searcher () -> Text -> Bool
-containsAny !searcher !text = not $ null $ Aho.runText (automaton searcher) text
+containsAny !searcher !text =
+  let
+    -- On the first match, return True immediately.
+    f _acc _match = Aho.Done True
+  in
+    Aho.runText False f (automaton searcher) text
 
 -- | Return whether the haystack contains any of the needles.
 -- Is case insensitive. The needles in the searcher should be lowercase.
 {-# NOINLINE containsAnyIgnoreCase #-}
 containsAnyIgnoreCase :: Searcher () -> Text -> Bool
-containsAnyIgnoreCase !searcher !text = not $ null $ Aho.runLower (automaton searcher) text
+containsAnyIgnoreCase !searcher !text =
+  let
+    -- On the first match, return True immediately.
+    f _acc _match = Aho.Done True
+  in
+    Aho.runLower False f (automaton searcher) text
