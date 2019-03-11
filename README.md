@@ -17,7 +17,13 @@ Running time to count all matches, in a real-world data set,
 comparing [a Java implementation][hankcs] and [a Rust implementation][burntsushi]
 against Alfred-Margaret, and against memcopy to establish a lower bound:
 
-![Graph that shows that Alfred-Margaret is fast.](performance.png)
+<p align="center">
+<img
+  title="Graph that shows that Alfred-Margaret is fast."
+  src="performance.png"
+  width="80%"
+>
+</p>
 
 For the full details of this benchmark, see
 [our announcement blog post][blog-post], which includes more details about the
