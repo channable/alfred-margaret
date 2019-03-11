@@ -11,6 +11,19 @@ optimizations that make this library fast.
 
 Alfred-Margaret is named after Alfred Aho and Margaret Corasick.
 
+## Performance
+
+Running time to count all matches, in a real-world data set,
+comparing [a Java implementation][hankcs] and [a Rust implementation][burntsushi]
+against Alfred-Margaret, and against memcopy to establish a lower bound:
+
+![Graph that shows that Alfred-Margaret is fast.](performance.png)
+
+For the full details of this benchmark, see
+[our announcement blog post][blog-post], which includes more details about the
+data set, the benchmark setup, and a few things to keep in mind when
+interpreting this graph.
+
 ## Example
 
 Check if a string contains one of the needles:
@@ -58,6 +71,8 @@ Replacer.run replacer "sweatshirts and shirttshirts"
 
 Alfred-Margaret is licensed under the 3-clause BSD license.
 
-[channable]: https://www.channable.com/
-[blog-post]: https://tech.channable.com/TODO
-[text]:      https://github.com/haskell/text
+[channable]:  https://www.channable.com/
+[blog-post]:  https://tech.channable.com/TODO
+[text]:       https://github.com/haskell/text
+[hankcs]:     https://github.com/hankcs/AhoCorasickDoubleArrayTrie/tree/v1.2.0
+[burntsushi]: https://github.com/BurntSushi/aho-corasick/tree/0.6.8
