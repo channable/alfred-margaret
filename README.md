@@ -73,6 +73,29 @@ Replacer.run replacer "sweatshirts and shirttshirts"
 > "sweabananas and pearbananas"
 ```
 
+Get all matches, possibly overlapping:
+
+```haskell
+import qualified Data.Text.AhoCorasick.Automaton as Aho
+
+pairNeedleWithSelf text = (Aho.unpackUtf16 text, text)
+automaton = Aho.build $ fmap pairNeedleWithSelf ["tshirt", "shirts", "shorts"]
+allMatches = Aho.runText [] (\matches match -> Aho.Step (match : matches))
+
+allMatches automaton "short tshirts"
+> [ Match {matchPos = CodeUnitIndex 13, matchValue = "shirts"}
+> , Match {matchPos = CodeUnitIndex 12, matchValue = "tshirt"}
+> ]
+
+allMatches automaton "sweatshirts and shirtshirts"
+> [ Match {matchPos = CodeUnitIndex 27, matchValue = "shirts"}
+> , Match {matchPos = CodeUnitIndex 26, matchValue = "tshirt"}
+> , Match {matchPos = CodeUnitIndex 22, matchValue = "shirts"}
+> , Match {matchPos = CodeUnitIndex 11, matchValue = "shirts"}
+> , Match {matchPos = CodeUnitIndex 10, matchValue = "tshirt"}
+> ]
+```
+
 ## License
 
 Alfred-Margaret is licensed under the 3-clause BSD license.
