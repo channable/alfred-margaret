@@ -1,25 +1,25 @@
-# Alfred-Margaret
+# Alfred–Margaret
 
-Alfred-Margaret is a fast implementation of the Aho-Corasick string
+Alfred–Margaret is a fast implementation of the Aho–Corasick string
 searching algorithm in Haskell. It powers many string-related operations
 in [Channable][channable].
 
 The library is designed to work with the [`text`][text] package. It matches
 directly on the internal UTF-16 representation of `Text` for efficiency. See the
-[announcement blog post][blog-post] for a deeper dive into Aho-Corasick, and the
+[announcement blog post][blog-post] for a deeper dive into Aho–Corasick, and the
 optimizations that make this library fast.
 
-Alfred-Margaret is named after Alfred Aho and Margaret Corasick.
+Alfred–Margaret is named after Alfred Aho and Margaret Corasick.
 
 ## Performance
 
 Running time to count all matches, in a real-world data set,
 comparing [a Java implementation][hankcs] and [a Rust implementation][burntsushi]
-against Alfred-Margaret, and against memcopy to establish a lower bound:
+against Alfred–Margaret, and against memcopy to establish a lower bound:
 
 <p align="center">
 <img
-  title="Graph that shows that Alfred-Margaret is fast."
+  title="Graph that shows that Alfred–Margaret is fast."
   src="performance.png"
   width="80%"
 >
@@ -98,10 +98,10 @@ allMatches automaton "sweatshirts and shirtshirts"
 
 ## License
 
-Alfred-Margaret is licensed under the 3-clause BSD license.
+Alfred–Margaret is licensed under the 3-clause BSD license.
 
 [channable]:  https://www.channable.com/
-[blog-post]:  https://tech.channable.com/TODO
+[blog-post]:  https://tech.channable.com/posts/2019-03-13-how-we-made-haskell-search-strings-as-fast-as-rust.html
 [text]:       https://github.com/haskell/text
 [hankcs]:     https://github.com/hankcs/AhoCorasickDoubleArrayTrie/tree/v1.2.0
 [burntsushi]: https://github.com/BurntSushi/aho-corasick/tree/0.6.8
