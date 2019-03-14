@@ -13,6 +13,15 @@ category:            Data, Text
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
+tested-with:
+                     -- Stackage LTS 11.22.
+                     GHC == 8.2.2
+                     -- Stackage LTS 12.14.
+                   , GHC == 8.4.3
+                     -- Stackage LTS 12.26.
+                   , GHC == 8.4.4
+                     -- Stackage LTS 13.10.
+                   , GHC == 8.6.3
 
 source-repository head
   type:     git
@@ -32,10 +41,6 @@ library
                      , vector
   ghc-options:         -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
   default-language:    Haskell2010
-  tested-with:         GHC == 8.2.2 -- Stackage LTS 11.22.
-                     , GHC == 8.4.3 -- Stackage LTS 12.14.
-                     , GHC == 8.4.4 -- Stackage LTS 12.26.
-                     , GHC == 8.6.3 -- Stackage LTS 13.10.
 
 test-suite test-suite
   type:                exitcode-stdio-1.0
