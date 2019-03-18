@@ -423,9 +423,10 @@ step
   -> State
   -> Int
   -> Int
+  -> Int
   -> [Match v]
   -> [Match v]
-step machine u16data !state !offset !length !matches =
+step machine u16data !state !initialOffset !offset !length !matches =
   let
     !(TextArray.Array bytes) = u16data
     !(I# i) = offset
@@ -433,16 +434,16 @@ step machine u16data !state !offset !length !matches =
     unit16 = fromIntegral (W# unitWord)
     nextState = followEdge (machineTransitions machine) unit16 state
     values = (machineValues machine) Vector.! (fromIntegral nextState)
-    prependMatch ms v = (Match (CodeUnitIndex offset) v) : ms
+    prependMatch ms v = (Match (CodeUnitIndex $ offset + 1 - initialOffset) v) : ms
     matches' = foldl' prependMatch matches values
   in
     if length == 0
       then matches
-      else step machine u16data nextState (offset + 1) (length - 1) matches'
+      else step machine u16data nextState initialOffset (offset + 1) (length - 1) matches'
 
 runText :: AcMachine v -> Text -> [Match v]
 runText machine (Text u16data offset length) =
-  step machine u16data stateInitial offset length []
+  step machine u16data stateInitial offset offset length []
 
 -- Finds all matches in the lowercased text. This function lowercases the text
 -- on the fly to avoid allocating a second lowercased text array. Lowercasing is

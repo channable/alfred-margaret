@@ -9,11 +9,9 @@
 
 module Main where
 
-import Control.DeepSeq (rnf)
 import Control.Monad (forM_, unless)
 import Data.Foldable (foldl')
 import Data.Text (Text)
-import Data.Word (Word16)
 import GHC.Stack (HasCallStack)
 import Prelude hiding (replicate)
 import Test.Hspec (Spec, Expectation, describe, it, shouldBe, hspec)
@@ -45,8 +43,7 @@ needleIsHaystackMatches needle =
   let
     needleUtf16 = Aho.unpackUtf16 needle
     len = Aho.lengthUtf16 needle
-    prependMatch ms match = Aho.Step (match : ms)
-    matches = Aho.runText [] prependMatch (Aho.build [(needleUtf16, ())]) needle
+    matches = Aho.runText (Aho.build [(needleUtf16, ())]) needle
   in
     matches `shouldBe` [Aho.Match len ()]
 
@@ -55,9 +52,8 @@ ahoMatch needles haystack =
   let
     makeNeedle (text, value) = (Aho.unpackUtf16 text, value)
     needlesUtf16 = fmap makeNeedle needles
-    prependMatch matches match = Aho.Step (match : matches)
   in
-    Aho.runText [] prependMatch (Aho.build needlesUtf16) haystack
+    Aho.runText (Aho.build needlesUtf16) haystack
 
 -- | Match without a payload, return only the match positions.
 matchPositions :: [Text] -> Text -> [Int]
@@ -131,9 +127,6 @@ main = hspec $ describe "Data.Text.AhoCorasick" spec
 spec :: Spec
 spec = do
   modifyMaxSuccess (const 200) $ do
-    describe "build" $ do
-      prop "does not throw exceptions" $ \ (kv :: [([Word16], Int)]) ->
-        rnf $ Aho.build kv
 
     describe "unpackUtf16" $ do
       it "unpacks code point U+437b8" $
@@ -245,12 +238,6 @@ spec = do
           -- The case below is a regression test; it did fail before; it would
           -- report a match at position 5 in addition to position 2.
           matchPositions ["bc","c\NULe"] "bc\NUL\NULe" `shouldMatchList` [2]
-
-      describe "when given empyt needles" $ do
-
-        it "does not report a match" $ do
-          matchPositions [""] "" `shouldMatchList` []
-          matchPositions [""] "foo" `shouldMatchList` []
 
       describe "when given random needles and haystacks" $ do
 
