@@ -26,7 +26,6 @@ module Data.Text.AhoCorasick.Searcher
   )
   where
 
-import Control.DeepSeq (NFData)
 import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
 import Data.Semigroup (Semigroup, (<>))
 import Data.Text (Text)
@@ -65,8 +64,6 @@ instance Eq v => Eq (Searcher v) where
   -- Since we store the length of the needle list anyway,
   -- we can use it to early out if there is a length mismatch.
   Searcher xs nx _ == Searcher ys ny _ = (nx, xs) == (ny, ys)
-
-instance NFData v => NFData (Searcher v)
 
 -- NOTE: Although we could implement Semigroup for every v by just concatenating
 -- needle lists, we don't, because this might lead to unexpected results. For
@@ -108,19 +105,11 @@ automaton = searcherAutomaton
 {-# NOINLINE containsAny #-}
 containsAny :: Searcher () -> Text -> Bool
 containsAny !searcher !text =
-  let
-    -- On the first match, return True immediately.
-    f _acc _match = Aho.Done True
-  in
-    Aho.runText False f (automaton searcher) text
+  not $ null $ Aho.runText (automaton searcher) text
 
 -- | Return whether the haystack contains any of the needles.
 -- Is case insensitive. The needles in the searcher should be lowercase.
 {-# NOINLINE containsAnyIgnoreCase #-}
 containsAnyIgnoreCase :: Searcher () -> Text -> Bool
 containsAnyIgnoreCase !searcher !text =
-  let
-    -- On the first match, return True immediately.
-    f _acc _match = Aho.Done True
-  in
-    Aho.runLower False f (automaton searcher) text
+  not $ null $ Aho.runLower (automaton searcher) text

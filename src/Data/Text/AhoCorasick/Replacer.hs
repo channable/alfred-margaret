@@ -24,7 +24,7 @@ module Data.Text.AhoCorasick.Replacer
   , Payload (..)
   ) where
 
-import Control.DeepSeq (NFData)
+import Data.Foldable (foldl')
 import Data.Hashable (Hashable)
 import Data.List (sort)
 import Data.Maybe (fromJust)
@@ -54,7 +54,7 @@ data Payload = Payload
   { needlePriority    :: {-# UNPACK #-} !Priority
   , needleLength      :: {-# UNPACK #-} !CodeUnitIndex
   , needleReplacement :: !Replacement
-  } deriving (Eq, Generic, Hashable, NFData, Show)
+  } deriving (Eq, Generic, Hashable, Show)
 
 -- | A state machine used for efficient replacements with many different needles.
 data Replacer = Replacer
@@ -62,7 +62,7 @@ data Replacer = Replacer
   , replacerSearcher :: Searcher Payload
   }
   deriving stock (Show, Eq, Generic)
-  deriving anyclass (Hashable, NFData)
+  deriving anyclass (Hashable)
 
 -- | Build an Aho-Corasick automaton that can be used for performing fast
 -- sequential replaces.
@@ -157,11 +157,11 @@ removeOverlap matches = case matches of
 -- for that priority. This way we don't have to build a new automaton after
 -- every round of replacements.
 {-# INLINE prependMatch #-}
-prependMatch :: Priority -> (Priority, [Match]) -> Aho.Match Payload -> Aho.Next (Priority, [Match])
+prependMatch :: Priority -> (Priority, [Match]) -> Aho.Match Payload -> (Priority, [Match])
 prependMatch !threshold (!pBest, !matches) (Aho.Match pos (Payload pMatch len replacement))
-  | pMatch < threshold && pMatch >  pBest = Aho.Step (pMatch, [Match (pos - len) len replacement])
-  | pMatch < threshold && pMatch == pBest = Aho.Step (pMatch, (Match (pos - len) len replacement) : matches)
-  | otherwise = Aho.Step (pBest, matches)
+  | pMatch < threshold && pMatch >  pBest = (pMatch, [Match (pos - len) len replacement])
+  | pMatch < threshold && pMatch == pBest = (pMatch, (Match (pos - len) len replacement) : matches)
+  | otherwise = (pBest, matches)
 
 run :: Replacer -> Text -> Text
 run replacer = fromJust . runWithLimit replacer maxBound
@@ -187,8 +187,8 @@ runWithLimit (Replacer case_ searcher) maxLength = go initialThreshold
       let
         seed = (minBound :: Priority, [])
         matchesWithPriority = case case_ of
-          CaseSensitive -> Aho.runText seed (prependMatch threshold) automaton haystack
-          IgnoreCase -> Aho.runLower seed (prependMatch threshold) automaton haystack
+          CaseSensitive -> foldl' (prependMatch threshold) seed $ Aho.runText automaton haystack
+          IgnoreCase -> foldl' (prependMatch threshold) seed $ Aho.runLower automaton haystack
       in
         case matchesWithPriority of
           -- No match at the given threshold, there is nothing left to do.

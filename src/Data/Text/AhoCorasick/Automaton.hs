@@ -10,6 +10,7 @@
 -- asserts enabled in production for two months, and in this time, the asserts
 -- have not been violated.
 {-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fignore-asserts #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -44,7 +45,6 @@ module Data.Text.AhoCorasick.Automaton
   , CodeUnit
   , CodeUnitIndex (..)
   , Match (..)
-  , Next (..)
   , lengthUtf16
   , lowerUtf16
   , unpackUtf16
@@ -53,22 +53,21 @@ module Data.Text.AhoCorasick.Automaton
   )
   where
 
-import Prelude hiding (length)
+import Prelude hiding (length, lookup)
 
-import Control.DeepSeq (NFData)
 import Control.Exception (assert)
 import Data.Bits ((.&.), (.|.), shiftL, shiftR)
 import Data.Foldable (foldl')
 import Data.Hashable (Hashable)
 import Data.IntMap.Strict (IntMap)
+import Data.Primitive.ByteArray (ByteArray (..))
 import Data.Text.Internal (Text (..))
 import Data.Word (Word16, Word64)
+import GHC.Exts (Int (..), Word (..), indexWord16Array#)
 import GHC.Generics (Generic)
-import Data.Primitive.ByteArray (ByteArray (..))
 
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
-import qualified Data.List as List
 import qualified Data.Text.Array as TextArray
 import qualified Data.Text.Unsafe as TextUnsafe
 import qualified Data.Vector as Vector
@@ -79,7 +78,7 @@ data CaseSensitivity
   = CaseSensitive
   | IgnoreCase
   deriving stock (Eq, Generic, Show)
-  deriving anyclass (Hashable, NFData)
+  deriving anyclass (Hashable)
 
 -- | A numbered state in the Aho-Corasick automaton.
 type State = Int
@@ -115,7 +114,7 @@ newtype CodeUnitIndex = CodeUnitIndex
   { codeUnitIndex :: Int
   }
   deriving stock (Eq, Generic, Show)
-  deriving newtype (Hashable, Ord, Num, Bounded, NFData)
+  deriving newtype (Hashable, Ord, Num, Bounded)
 
 data Match v = Match
   { matchPos   :: {-# UNPACK #-} !CodeUnitIndex
@@ -131,11 +130,7 @@ data AcMachine v = AcMachine
   { machineValues :: !(Vector.Vector [v])
   -- ^ For every state, the values associated with its needles. If the state is
   -- not a match state, the list is empty.
-  , machineTransitions :: !(UVector.Vector Transition)
-  -- ^ A packed vector of transitions. For every state, there is a slice of this
-  -- vector that starts at the offset given by `machineOffsets`, and ends at the
-  -- first wildcard transition.
-  , machineOffsets :: !(UVector.Vector Int)
+  , machineTransitions :: !(Vector.Vector Transitions)
   -- ^ For every state, the index into `machineTransitions` where the transition
   -- list for that state starts.
   , machineRootAsciiTransitions :: !(UVector.Vector Transition)
@@ -143,8 +138,6 @@ data AcMachine v = AcMachine
   -- avoid having to walk all transitions, at the cost of using a bit of
   -- additional memory.
   } deriving (Generic)
-
-instance NFData v => NFData (AcMachine v)
 
 -- | The wildcard value is 2^16, one more than the maximal 16-bit code unit.
 wildcard :: Integral a => a
@@ -179,17 +172,26 @@ newWildcardTransition state =
   in
     (state64 `shiftL` 32) .|. wildcard
 
+newtype Transitions = Transitions (UVector.Vector Transition)
+
+-- | Find the transition for the code unit by doing a linear scan over all
+-- transitions. Returns `Right nextState` if a transition exists, or `Left
+-- failState` in case we encountered the fallback transition. It is assumed
+-- that the transitions vector is terminated by a wildcard transition.
+lookup :: CodeUnit -> Transitions -> Either State State
+lookup !input (Transitions ts) = go 0
+  where
+    go !i = case ts UVector.! i of
+      t | transitionIsWildcard t        -> Left (transitionState t)
+      t | transitionCodeUnit t == input -> Right (transitionState t)
+      _ -> go (i + 1)
+
 -- | Pack transitions for each state into one contiguous array. In order to find
 -- the transitions for a specific state, we also produce a vector of start
 -- indices. All transition lists are terminated by a wildcard transition, so
 -- there is no need to record the length.
-packTransitions :: [[Transition]] -> (UVector.Vector Transition, UVector.Vector Int)
-packTransitions transitions =
-  let
-    packed = UVector.fromList $ concat transitions
-    offsets = UVector.fromList $ scanl (+) 0 $ fmap List.length transitions
-  in
-    (packed, offsets)
+packTransitions :: [[Transition]] -> Vector.Vector Transitions
+packTransitions = Vector.fromList . fmap (Transitions . UVector.fromList)
 
 -- | Construct an Aho-Corasick automaton for the given needles.
 -- Takes a list of code units rather than `Text`, to allow mapping the code
@@ -216,11 +218,11 @@ build needlesWithValues =
 
     -- Pack the transition lists into one contiguous array, and build the lookup
     -- table for the transitions from the root state.
-    (transitions, offsets) = packTransitions transitionsList
+    transitions = packTransitions transitionsList
     rootTransitions = buildAsciiTransitionLookupTable $ transitionMap IntMap.! 0
     values = Vector.generate numStates (valueMap IntMap.!)
   in
-    AcMachine values transitions offsets rootTransitions
+    AcMachine values transitions rootTransitions
 
 -- | Build the automaton, and format it as Graphviz Dot, for visual debugging.
 debugBuildDot :: [[CodeUnit]] -> String
@@ -306,7 +308,6 @@ buildTransitionMap =
 
     -- Initially, the root state (state 0) exists, and it has no transitions
     -- to anywhere.
-    stateInitial = 0
     initialTransitions = IntMap.singleton stateInitial IntMap.empty
     initialValues = IntMap.empty
     insertNeedle = go stateInitial
@@ -400,140 +401,48 @@ buildValueMap transitions fallbacks valuesInitial =
   in
     foldBreadthFirst insertValues (IntMap.singleton 0 []) transitions
 
--- Define aliases for array indexing so we can turn bounds checks on and off
--- in one place. We ran this code with `Vector.!` (bounds-checked indexing) in
--- production for two months without failing the bounds check, so we have turned
--- the check off for performance now.
-at :: forall a. Vector.Vector a -> Int -> a
-at = Vector.unsafeIndex
+stateInitial :: State
+stateInitial = 0
 
-uAt :: forall a. UVector.Unbox a => UVector.Vector a -> Int -> a
-uAt = UVector.unsafeIndex
+-- | Follow the edge for the input code unit from the current state. If no such
+-- edge exists, follow the "failure" edge, and try again.
+followEdge :: Vector.Vector Transitions -> CodeUnit -> State -> State
+followEdge transitionsFrom !input !state =
+  case lookup input (transitionsFrom Vector.! (fromIntegral state)) of
+    -- Note: recursion halts eventually, because the failure transitions are
+    -- not cyclic. Eventually we get back to the initial state, and there we
+    -- stop the recursion.
+    Right nextState -> nextState
+    Left failState -> if state == stateInitial
+      then state
+      else followEdge transitionsFrom input failState
 
--- | Result of handling a match: stepping the automaton can exit early by
--- returning a `Done`, or it can continue with a new accumulator with `Step`.
-data Next a
-  = Done !a
-  | Step !a
-
--- | Run the automaton, possibly lowercasing the input text on the fly if case
--- insensitivity is desired. See also `lowerCodeUnit` and `runLower`.
--- WARNING: Run benchmarks when modifying this function; its performance is
--- fragile. It took many days to discover the current formulation which compiles
--- to fast code; removing the wrong bang pattern could cause a 10% performance
--- regression.
-{-# INLINE runWithCase #-}
-runWithCase
-  :: forall a v
-  .  CaseSensitivity
-  -> a
-  -> (a -> Match v -> Next a)
-  -> AcMachine v
-  -> Text
-  -> a
-runWithCase caseSensitivity seed f machine text =
+step
+  :: AcMachine v
+  -> TextArray.Array
+  -> State
+  -> Int
+  -> Int
+  -> [Match v]
+  -> [Match v]
+step machine u16data !state !offset !length !matches =
   let
-    Text u16data !initialOffset !initialRemaining = text
-    !values = machineValues machine
-    !transitions = machineTransitions machine
-    !offsets = machineOffsets machine
-    !rootAsciiTransitions = machineRootAsciiTransitions machine
-    !stateInitial = 0
-
-    -- NOTE: All of the arguments are strict here, because we want to compile
-    -- them down to unpacked variables on the stack, or even registers.
-    -- The INLINE / NOINLINE annotations here were added to fix a regression we
-    -- observed when going from GHC 8.2 to GHC 8.6, and this particular
-    -- combination of INLINE and NOINLINE is the fastest one. Removing increases
-    -- the benchmark running time by about 9%.
-
-    {-# NOINLINE consumeInput #-}
-    consumeInput :: Int -> Int -> a -> State -> a
-    consumeInput !offset !remaining !acc !state =
-      let
-        inputCodeUnit = fromIntegral $ TextArray.unsafeIndex u16data offset
-        -- NOTE: Although doing this match here entangles the automaton a bit
-        -- with case sensitivity, doing so is faster than passing in a function
-        -- that transforms each code unit.
-        casedCodeUnit = case caseSensitivity of
-          IgnoreCase -> lowerCodeUnit inputCodeUnit
-          CaseSensitive -> inputCodeUnit
-      in
-        case remaining of
-          0 -> acc
-          _ -> followEdge (offset + 1) (remaining - 1) acc state casedCodeUnit
-
-    {-# INLINE followEdge #-}
-    followEdge :: Int -> Int -> a -> State -> CodeUnit -> a
-    followEdge !offset !remaining !acc !state !input =
-      let
-        !tssOffset = offsets `uAt` state
-      in
-        -- When we follow an edge, we look in the transition table and do a
-        -- linear scan over all transitions until we find the right one, or
-        -- until we hit the wildcard transition at the end. For 0 or 1 or 2
-        -- transitions that is fine, but the initial state often has more
-        -- transitions, so we have a dedicated lookup table for it, that takes
-        -- up a bit more space, but provides O(1) lookup of the next state. We
-        -- only do this for the first 128 code units (all of ascii).
-        if state == stateInitial && input < asciiCount
-          then lookupRootAsciiTransition offset remaining acc input
-          else lookupTransition offset remaining acc state input tssOffset
-
-    {-# NOINLINE collectMatches #-}
-    collectMatches :: Int -> Int -> a -> State -> a
-    collectMatches !offset !remaining !acc !state =
-      let
-        matchedValues = values `at` state
-        -- Fold over the matched values. If at any point the user-supplied fold
-        -- function returns `Done`, then we early out. Otherwise continue.
-        handleMatch !acc' vs = case vs of
-          []     -> consumeInput offset remaining acc' state
-          v:more -> case f acc' (Match (CodeUnitIndex $ offset - initialOffset) v) of
-            Step newAcc -> handleMatch newAcc more
-            Done finalAcc -> finalAcc
-      in
-        handleMatch acc matchedValues
-
-    -- NOTE: there is no `state` argument here, because this case applies only
-    -- to the root state `stateInitial`.
-    {-# INLINE lookupRootAsciiTransition #-}
-    lookupRootAsciiTransition :: Int -> Int -> a -> CodeUnit -> a
-    lookupRootAsciiTransition !offset !remaining !acc !input =
-      case rootAsciiTransitions `uAt` fromIntegral input of
-        t | transitionIsWildcard t -> consumeInput offset remaining acc stateInitial
-          | otherwise -> collectMatches offset remaining acc (transitionState t)
-
-    {-# INLINE lookupTransition #-}
-    lookupTransition :: Int -> Int -> a -> State -> CodeUnit -> Int -> a
-    lookupTransition !offset !remaining !acc !state !input !i =
-      case transitions `uAt` i of
-        -- There is no transition for the given input. Follow the fallback edge,
-        -- and try again from that state, etc. If we are in the base state
-        -- already, then nothing matched, so move on to the next input.
-        t | transitionIsWildcard t ->
-              if state == stateInitial
-                then consumeInput offset remaining acc state
-                else followEdge offset remaining acc (transitionState t) input
-
-        -- We found the transition, switch to that new state, collecting matches.
-        -- NOTE: This comes after wildcard checking, because the code unit of
-        -- the wildcard transition is 0, which is a valid input.
-        t | transitionCodeUnit t == input ->
-              collectMatches offset remaining acc (transitionState t)
-
-        -- The transition we inspected is not for the current input, and it is not
-        -- a wildcard either; look at the next transition then.
-        _ -> lookupTransition offset remaining acc state input (i + 1)
+    !(TextArray.Array bytes) = u16data
+    !(I# i) = offset
+    unitWord = indexWord16Array# bytes i
+    unit16 = fromIntegral (W# unitWord)
+    nextState = followEdge (machineTransitions machine) unit16 state
+    values = (machineValues machine) Vector.! (fromIntegral nextState)
+    prependMatch ms v = (Match (CodeUnitIndex offset) v) : ms
+    matches' = foldl' prependMatch matches values
   in
-    consumeInput initialOffset initialRemaining seed stateInitial
+    if length == 0
+      then matches
+      else step machine u16data nextState (offset + 1) (length - 1) matches'
 
--- NOTE: To get full advantage of inlining this function, you probably want to
--- compile the compiling module with -fllvm and the same optimization flags as
--- this module.
-{-# INLINE runText #-}
-runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
-runText = runWithCase CaseSensitive
+runText :: AcMachine v -> Text -> [Match v]
+runText machine (Text u16data offset length) =
+  step machine u16data stateInitial offset length []
 
 -- Finds all matches in the lowercased text. This function lowercases the text
 -- on the fly to avoid allocating a second lowercased text array. Lowercasing is
@@ -546,8 +455,8 @@ runText = runWithCase CaseSensitive
 -- compile the compiling module with -fllvm and the same optimization flags as
 -- this module.
 {-# INLINE runLower #-}
-runLower :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
-runLower = runWithCase IgnoreCase
+runLower :: AcMachine v -> Text -> [Match v]
+runLower machine haystack = runText machine (lowerUtf16 haystack)
 
 -- | Return a Text as a list of UTF-16 code units.
 unpackUtf16 :: Text -> [CodeUnit]
