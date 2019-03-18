@@ -174,18 +174,6 @@ newWildcardTransition state =
 
 newtype Transitions = Transitions (UVector.Vector Transition)
 
--- | Find the transition for the code unit by doing a linear scan over all
--- transitions. Returns `Right nextState` if a transition exists, or `Left
--- failState` in case we encountered the fallback transition. It is assumed
--- that the transitions vector is terminated by a wildcard transition.
-lookup :: CodeUnit -> Transitions -> Either State State
-lookup !input (Transitions ts) = go 0
-  where
-    go !i = case ts UVector.! i of
-      t | transitionIsWildcard t        -> Left (transitionState t)
-      t | transitionCodeUnit t == input -> Right (transitionState t)
-      _ -> go (i + 1)
-
 -- | Pack transitions for each state into one contiguous array. In order to find
 -- the transitions for a specific state, we also produce a vector of start
 -- indices. All transition lists are terminated by a wildcard transition, so
@@ -403,6 +391,18 @@ buildValueMap transitions fallbacks valuesInitial =
 
 stateInitial :: State
 stateInitial = 0
+
+-- | Find the transition for the code unit by doing a linear scan over all
+-- transitions. Returns `Right nextState` if a transition exists, or `Left
+-- failState` in case we encountered the fallback transition. It is assumed
+-- that the transitions vector is terminated by a wildcard transition.
+lookup :: CodeUnit -> Transitions -> Either State State
+lookup !input (Transitions ts) = go 0
+  where
+    go !i = case ts UVector.! i of
+      t | transitionIsWildcard t        -> Left (transitionState t)
+      t | transitionCodeUnit t == input -> Right (transitionState t)
+      _ -> go (i + 1)
 
 -- | Follow the edge for the input code unit from the current state. If no such
 -- edge exists, follow the "failure" edge, and try again.
