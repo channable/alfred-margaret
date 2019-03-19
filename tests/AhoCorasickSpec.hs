@@ -4,24 +4,25 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
 import Control.DeepSeq (rnf)
 import Control.Monad (forM_, unless)
 import Data.Foldable (foldl')
-import Data.Text (Text)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Word (Word16)
-import GHC.Stack (HasCallStack)
-import Prelude hiding (replicate)
-import Test.Hspec (Spec, Expectation, describe, it, shouldBe, hspec)
+import Test.Hspec (Spec, Expectation, describe, hspec, it, parallel, shouldBe)
 import Test.Hspec.Expectations (shouldMatchList, shouldSatisfy)
 import Test.Hspec.QuickCheck (modifyMaxSuccess, modifyMaxSize, prop)
 import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink, (==>))
-import Test.QuickCheck.Gen (Gen)
 import Test.QuickCheck.Instances ()
+import Test.QuickCheck.Gen (Gen)
+import GHC.Stack (HasCallStack)
+import Data.Text (Text)
+import Prelude hiding (replicate)
 
 import qualified Data.Char as Char
 import qualified Data.Text as Text
@@ -34,6 +35,7 @@ import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Replacer as Replacer
+import qualified Data.Text.AhoCorasick.Splitter as Splitter
 
 instance Arbitrary CaseSensitivity where
   arbitrary = Gen.elements [CaseSensitive, IgnoreCase]
@@ -129,7 +131,7 @@ main :: IO ()
 main = hspec $ describe "Data.Text.AhoCorasick" spec
 
 spec :: Spec
-spec = do
+spec = parallel $ do
   modifyMaxSuccess (const 200) $ do
     describe "build" $ do
       prop "does not throw exceptions" $ \ (kv :: [([Word16], Int)]) ->
@@ -156,7 +158,7 @@ spec = do
 
         it "reports a single match for non-BMP data" $ do
           -- Include a few code points outside of the Basic Multilingual Plane,
-          -- which require multiple code units to encode.
+          -- which require multible code units to encode.
           needleIsHaystackMatches "\x000437b8suffix"
           needleIsHaystackMatches "aaa\359339aaa\95759aa\899256aa"
 
@@ -291,6 +293,7 @@ spec = do
   modifyMaxSize (const 10) $ describe "Replacer.run" $ do
     let
       genHaystack = fmap Text.pack $ Gen.listOf $ Gen.frequency [(40, Gen.elements "abAB"), (1, pure 'İ'), (1, arbitrary)]
+      -- needles may not be empty, because empty needles are filtered out in an I.ActionReplaceMultiple
       genNeedle = fmap Text.pack $ Gen.resize 3 $ Gen.listOf1 $ Gen.elements "abAB"
       genReplaces = Gen.listOf $ (,) <$> genNeedle <*> arbitrary
       shrinkReplaces = filter (not . any (\(needle, _) -> Text.null needle)) . shrink
@@ -367,3 +370,11 @@ spec = do
         expected = foldl' replaceText haystack replaces
       in
         Replacer.run replacer haystack `shouldBe` expected
+
+  describe "Splitter.split" $
+
+    it "passes an example" $
+      let separator = "bob" in
+      let splitter = Splitter.build separator in
+      Splitter.split splitter "C++bobobCOBOLbobScala"
+        `shouldBe` "C++" :| ["obCOBOL", "Scala"]

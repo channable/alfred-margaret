@@ -30,8 +30,9 @@ source-repository head
 library
   hs-source-dirs:      src
   exposed-modules:     Data.Text.AhoCorasick.Automaton
-                     , Data.Text.AhoCorasick.Searcher
                      , Data.Text.AhoCorasick.Replacer
+                     , Data.Text.AhoCorasick.Searcher
+                     , Data.Text.AhoCorasick.Splitter
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , deepseq
