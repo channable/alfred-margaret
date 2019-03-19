@@ -47,6 +47,7 @@ module Data.Text.AhoCorasick.Automaton
   , Next (..)
   , lengthUtf16
   , lowerUtf16
+  , isCaseInvariant
   , unpackUtf16
   , unsafeCutUtf16
   , unsafeSliceUtf16
@@ -69,11 +70,12 @@ import Data.Primitive.ByteArray (ByteArray (..))
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
+import qualified Data.Text as Text
 import qualified Data.Text.Array as TextArray
 import qualified Data.Text.Unsafe as TextUnsafe
 import qualified Data.Vector as Vector
-import qualified Data.Vector.Unboxed as UVector
 import qualified Data.Vector.Primitive as PVector
+import qualified Data.Vector.Unboxed as UVector
 
 data CaseSensitivity
   = CaseSensitive
@@ -657,3 +659,10 @@ lowerCodeUnit cu =
      -- like the input. This property was verified by exhaustive testing; see
      -- also the test in AhoCorasickSpec.hs.
     else fromIntegral $ Char.ord $ Char.toLower $ Char.chr $ fromIntegral cu
+
+-- | Return whether text is the same lowercase as uppercase, such that this
+-- function will not return true when Aho–Corasick would differentiate when
+-- doing case-insensitive matching.
+{-# INLINE isCaseInvariant #-}
+isCaseInvariant :: Text -> Bool
+isCaseInvariant = Text.all (\c -> Char.toLower c == Char.toUpper c)
