@@ -60,11 +60,13 @@ instance Show (Searcher v) where
 
 instance Hashable v => Hashable (Searcher v) where
   hashWithSalt salt searcher = hashWithSalt salt $ searcherNeedles searcher
+  {-# INLINE hashWithSalt #-}
 
 instance Eq v => Eq (Searcher v) where
   -- Since we store the length of the needle list anyway,
   -- we can use it to early out if there is a length mismatch.
   Searcher xs nx _ == Searcher ys ny _ = (nx, xs) == (ny, ys)
+  {-# INLINE (==) #-}
 
 instance NFData v => NFData (Searcher v)
 
@@ -76,11 +78,13 @@ instance NFData v => NFData (Searcher v)
 -- possibly having duplicate priorities in the resulting searcher.
 instance Semigroup (Searcher ()) where
   x <> y = buildWithValues (needles x <> needles y)
+  {-# INLINE (<>) #-}
 
 build :: [Text] -> Searcher ()
 build = buildWithValues . fmap (\x -> (x, ()))
 
 buildWithValues :: Hashable v => [(Text, v)] -> Searcher v
+{-# INLINABLE buildWithValues #-}
 buildWithValues ns =
   let
     unpack (text, value) = (Aho.unpackUtf16 text, value)
