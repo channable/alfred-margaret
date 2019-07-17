@@ -273,7 +273,8 @@ spec = parallel $ do
         prop "reports all infixes of the haystack" $
           QuickCheck.forAllShrink arbitraryNeedlesHaystack shrink $ \ (needles, haystack) ->
             matchPositions needles haystack `shouldMatchList` naiveMatchPositions needles haystack
-
+  let
+    isSurrogate cu = cu >= 0xd800 && cu < 0xe000
   describe "Char.toLower" $ do
 
     -- We test that Char.toLower maps the BMP onto itself, because this implies
@@ -281,14 +282,19 @@ spec = parallel $ do
     -- code units, which allows us to implement lowercasing in an optimized
     -- manner.
     it "maps the Basic Multilingual Plane onto itself" $
-      let
-        isSurrogate cu = cu >= 0xd800 && cu < 0xe000
-      in
-        forM_ [0 .. maxBound :: Aho.CodeUnit] $ \cu -> unless (isSurrogate cu) $
-          let
-            lower = Char.ord $ Char.toLower $ Char.chr $ fromIntegral cu
-          in
-            lower `shouldSatisfy` not . isSurrogate
+      forM_ [0 .. maxBound :: Aho.CodeUnit] $ \cu -> unless (isSurrogate cu) $
+        let
+          lower = Char.ord $ Char.toLower $ Char.chr $ fromIntegral cu
+        in
+          lower `shouldSatisfy` not . isSurrogate
+
+  describe "Aho.lowerCodeUnit" $
+    it "is equivalent to Char.toLower on the BMP" $
+      forM_ [0 .. maxBound :: Aho.CodeUnit] $ \cu -> unless (isSurrogate cu) $
+        let
+          lowerAsChar = fromIntegral . Char.ord . Char.toLower . Char.chr . fromIntegral
+        in
+          lowerAsChar cu `shouldBe` Aho.lowerCodeUnit cu
 
   modifyMaxSize (const 10) $ describe "Replacer.run" $ do
     let

@@ -45,9 +45,10 @@ module Data.Text.AhoCorasick.Automaton
   , CodeUnitIndex (..)
   , Match (..)
   , Next (..)
-  , lengthUtf16
-  , lowerUtf16
   , isCaseInvariant
+  , lengthUtf16
+  , lowerCodeUnit
+  , lowerUtf16
   , unpackUtf16
   , unsafeCutUtf16
   , unsafeSliceUtf16
@@ -640,25 +641,41 @@ mapUtf16 f (Text u16data offset length) =
 lowerUtf16 :: Text -> Text
 lowerUtf16 = mapUtf16 lowerCodeUnit
 
+-- | Convert CodeUnits that represent a character on their own (i.e. that are not part of a
+-- surrogate pair) to their lower case representation.
+--
+-- This function has a special code path for ASCII characters, because Char.toLower
+-- is **incredibly** slow. It's implemented there if you want to see for yourself:
+-- (https://github.com/ghc/ghc/blob/ghc-8.6.3-release/libraries/base/cbits/WCsubst.c#L4732)
+-- (It does a binary search on 1276 casing rules)
 {-# INLINE lowerCodeUnit #-}
 lowerCodeUnit :: CodeUnit -> CodeUnit
-lowerCodeUnit cu =
-  if cu >= 0xd800 && cu < 0xe000
-     -- This code unit is part of a surrogate pair. Don't touch those, because
-     -- we don't have all information required to decode the code point. Note
-     -- that alphabets that need to be encoded as surrogate pairs are mostly
-     -- archaic and obscure; all of the languages used by our customers have
-     -- alphabets in the Basic Multilingual Plane, which does not need surrogate
-     -- pairs. Note that the BMP is not just ascii or extended ascii. See also
-     -- https://codepoints.net/basic_multilingual_plane.
-    then cu
-     -- The code unit is a code point on its own (not part of a surrogate pair),
-     -- lowercase the code point. These code points, which are all in the BMP,
-     -- have the important property that lowercasing them is again a code point
-     -- in the BMP, so the output can be encoded in exactly one code unit, just
-     -- like the input. This property was verified by exhaustive testing; see
-     -- also the test in AhoCorasickSpec.hs.
-    else fromIntegral $ Char.ord $ Char.toLower $ Char.chr $ fromIntegral cu
+lowerCodeUnit cu
+  -- ASCII letters A..Z and a..z are two contiguous blocks.
+  -- Converting to lower case amounts to adding a fixed offset.
+  | fromIntegral cu >= Char.ord 'A' && fromIntegral cu <= Char.ord 'Z'
+    = cu + fromIntegral (Char.ord 'a' - Char.ord 'A')
+
+    -- Everything else in ASCII is invariant under toLower.
+  -- The a..z range is already lower case, and all non-letter characters are case-invariant.
+  | cu <= 127 = cu
+
+  -- This code unit is part of a surrogate pair. Don't touch those, because
+  -- we don't have all information required to decode the code point. Note
+  -- that alphabets that need to be encoded as surrogate pairs are mostly
+  -- archaic and obscure; all of the languages used by our customers have
+  -- alphabets in the Basic Multilingual Plane, which does not need surrogate
+  -- pairs. Note that the BMP is not just ascii or extended ascii. See also
+  -- https://codepoints.net/basic_multilingual_plane.
+  | cu >= 0xd800 && cu < 0xe000 = cu
+
+  -- The code unit is a code point on its own (not part of a surrogate pair),
+  -- lowercase the code point. These code points, which are all in the BMP,
+  -- have the important property that lowercasing them is again a code point
+  -- in the BMP, so the output can be encoded in exactly one code unit, just
+  -- like the input. This property was verified by exhaustive testing; see
+  -- also the test in AhoCorasickSpec.hs.
+  | otherwise = fromIntegral $ Char.ord $ Char.toLower $ Char.chr $ fromIntegral cu
 
 -- | Return whether text is the same lowercase as uppercase, such that this
 -- function will not return true when Aho–Corasick would differentiate when
