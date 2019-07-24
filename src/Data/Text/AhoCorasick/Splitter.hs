@@ -29,6 +29,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text.AhoCorasick.Automaton (AcMachine)
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
+import qualified Data.Text.Utf16 as Utf16
 
 --------------------------------------------------------------------------------
 -- Splitter
@@ -44,7 +45,7 @@ data Splitter =
 {-# INLINE build #-}
 build :: Text -> Splitter
 build sep =
-  let !auto = Aho.build [(Aho.unpackUtf16 sep, ())] in
+  let !auto = Aho.build [(Utf16.unpackUtf16 sep, ())] in
   Splitter auto sep
 
 -- | Get the automaton that would be used for finding separators.
@@ -120,13 +121,13 @@ finalizeAccum (Accum _ hay res prevEnd) =
   -- Once we have processed all the matches, there is still the substring after
   -- the final match. This substring is always included in the result, even
   -- when there were no matches. Hence we can return a non-empty list.
-  let !str = Aho.unsafeSliceUtf16 prevEnd (Aho.lengthUtf16 hay - prevEnd) hay in
+  let !str = Utf16.unsafeSliceUtf16 prevEnd (Utf16.lengthUtf16 hay - prevEnd) hay in
   str :| res
 
 -- | The initial accumulator begins at the begin of the haystack.
 {-# INLINE zeroAccum #-}
 zeroAccum :: Text -> Text -> Accum
-zeroAccum sep hay = Accum (Aho.lengthUtf16 sep) hay [] 0
+zeroAccum sep hay = Accum (Utf16.lengthUtf16 sep) hay [] 0
 
 -- | Step the accumulator using the next match. Overlapping matches will be
 -- ignored. Overlapping matches may occur when the separator has a non-empty
@@ -143,7 +144,7 @@ stepAccum acc@(Accum sepLen hay res prevEnd) (Aho.Match sepEnd _)
   -- The match is behind the current offset, so we slice the haystack until the
   -- begin of the match and include that as a result.
   | otherwise =
-      let !str = Aho.unsafeSliceUtf16 prevEnd (sepEnd - sepLen - prevEnd) hay in
+      let !str = Utf16.unsafeSliceUtf16 prevEnd (sepEnd - sepLen - prevEnd) hay in
       Aho.Step acc { accumResult = str : res, accumPrevEnd = sepEnd }
 
 --------------------------------------------------------------------------------

@@ -33,6 +33,7 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
+import qualified Data.Text.Utf16 as Utf16
 
 -- | A set of needles with associated values, and an Aho-Corasick automaton to
 -- efficiently find those needles.
@@ -87,7 +88,7 @@ buildWithValues :: Hashable v => [(Text, v)] -> Searcher v
 {-# INLINABLE buildWithValues #-}
 buildWithValues ns =
   let
-    unpack (text, value) = (Aho.unpackUtf16 text, value)
+    unpack (text, value) = (Utf16.unpackUtf16 text, value)
   in
     Searcher (hashed ns) (length ns) $ Aho.build $ fmap unpack ns
 

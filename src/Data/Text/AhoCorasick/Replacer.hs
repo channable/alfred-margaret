@@ -38,6 +38,7 @@ import Data.Text.AhoCorasick.Searcher (Searcher)
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Searcher as Searcher
+import qualified Data.Text.Utf16 as Utf16
 
 -- | Descriptive type alias for strings to search for.
 type Needle = Text
@@ -81,12 +82,12 @@ build caseSensitivity replaces = Replacer caseSensitivity searcher
       let
         needle' = case caseSensitivity of
           CaseSensitive -> needle
-          IgnoreCase -> Aho.lowerUtf16 needle
+          IgnoreCase -> Utf16.lowerUtf16 needle
       in
         -- Note that we negate i: earlier needles have a higher priority. We
         -- could avoid it and define larger integers to be lower priority, but
         -- that made the terminology in this module very confusing.
-        (needle', Payload (-i) (Aho.lengthUtf16 needle') replacement)
+        (needle', Payload (-i) (Utf16.lengthUtf16 needle') replacement)
 
 -- | Return the composition `replacer2` after `replacer1`, if they have the same
 -- case sensitivity. If the case sensitivity differs, Nothing is returned.
@@ -126,16 +127,16 @@ replace matches haystack = Text.concat $ go 0 matches haystack
     go !_offset [] remainder = [remainder]
     go !offset ((Match pos len replacement) : ms) remainder =
       let
-        (prefix, suffix) = Aho.unsafeCutUtf16 (pos - offset) len remainder
+        (prefix, suffix) = Utf16.unsafeCutUtf16 (pos - offset) len remainder
       in
         prefix : replacement : go (pos + len) ms suffix
 
 -- | Compute the length of the string resulting from applying the replacements.
 replacementLength :: [Match] -> Text -> CodeUnitIndex
-replacementLength matches initial  = go matches (Aho.lengthUtf16 initial)
+replacementLength matches initial  = go matches (Utf16.lengthUtf16 initial)
   where
     go [] !acc = acc
-    go (Match _ matchLen repl : rest) !acc = go rest (acc - matchLen + Aho.lengthUtf16 repl)
+    go (Match _ matchLen repl : rest) !acc = go rest (acc - matchLen + Utf16.lengthUtf16 repl)
 
 -- | Given a list of matches sorted on start position, remove matches that start
 -- within an earlier match.

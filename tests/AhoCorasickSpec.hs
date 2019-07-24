@@ -36,6 +36,7 @@ import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Replacer as Replacer
 import qualified Data.Text.AhoCorasick.Splitter as Splitter
+import qualified Data.Text.Utf16 as Utf16
 
 instance Arbitrary CaseSensitivity where
   arbitrary = Gen.elements [CaseSensitive, IgnoreCase]
@@ -45,8 +46,8 @@ instance Arbitrary CaseSensitivity where
 needleIsHaystackMatches :: HasCallStack => Text -> Expectation
 needleIsHaystackMatches needle =
   let
-    needleUtf16 = Aho.unpackUtf16 needle
-    len = Aho.lengthUtf16 needle
+    needleUtf16 = Utf16.unpackUtf16 needle
+    len = Utf16.lengthUtf16 needle
     prependMatch ms match = Aho.Step (match : ms)
     matches = Aho.runText [] prependMatch (Aho.build [(needleUtf16, ())]) needle
   in
@@ -55,7 +56,7 @@ needleIsHaystackMatches needle =
 ahoMatch :: [(Text, a)] -> Text -> [Aho.Match a]
 ahoMatch needles haystack =
   let
-    makeNeedle (text, value) = (Aho.unpackUtf16 text, value)
+    makeNeedle (text, value) = (Utf16.unpackUtf16 text, value)
     needlesUtf16 = fmap makeNeedle needles
     prependMatch matches match = Aho.Step (match : matches)
   in
@@ -68,7 +69,7 @@ matchPositions needles haystack =
     withUnit x = (x, ())
     matches = ahoMatch (fmap withUnit needles) haystack
   in
-    fmap (Aho.codeUnitIndex . Aho.matchPos) matches
+    fmap (Utf16.codeUnitIndex . Aho.matchPos) matches
 
 -- | `matchPositions` implemented naively in terms of Text's functionality,
 -- which we assume to be correct.
@@ -142,11 +143,11 @@ spec = parallel $ do
         -- Note that 0x437b8 lies in the currently unassigned "Plane 5"; the
         -- code point does not currently exist, but that should not bother us.
         -- Check in Python: '\U000437b8'.encode('utf-16be')
-        Aho.unpackUtf16 "\x000437b8" `shouldBe` [0xd8cd, 0xdfb8]
+        Utf16.unpackUtf16 "\x000437b8" `shouldBe` [0xd8cd, 0xdfb8]
 
       it "unpacks adjacent nulls individually" $ do
-        Aho.unpackUtf16 "c\NULe" `shouldBe` [99, 0, 101]
-        Aho.unpackUtf16 "bc\NUL\NULe" `shouldBe` [98, 99, 0, 0, 101]
+        Utf16.unpackUtf16 "c\NULe" `shouldBe` [99, 0, 101]
+        Utf16.unpackUtf16 "bc\NUL\NULe" `shouldBe` [98, 99, 0, 0, 101]
 
     describe "runText" $ do
 
@@ -261,20 +262,22 @@ spec = parallel $ do
             let
               dup x = (x, x)
               matches = ahoMatch (fmap dup needles) haystack
-              sliceMatch endPos len = Aho.unsafeSliceUtf16 (endPos - len) len haystack
+              sliceMatch endPos len = Utf16.unsafeSliceUtf16 (endPos - len) len haystack
             in
               -- Discard inputs for which there are no matches, to ensure we get
               -- enough coverage for the case where there are matches.
               not (null matches) ==>
                 forM_ matches $ \ (Aho.Match pos needle) -> do
                   needle `shouldSatisfy` (`Text.isInfixOf` haystack)
-                  sliceMatch pos (Aho.lengthUtf16 needle) `shouldBe` needle
+                  sliceMatch pos (Utf16.lengthUtf16 needle) `shouldBe` needle
 
         prop "reports all infixes of the haystack" $
           QuickCheck.forAllShrink arbitraryNeedlesHaystack shrink $ \ (needles, haystack) ->
             matchPositions needles haystack `shouldMatchList` naiveMatchPositions needles haystack
+
   let
     isSurrogate cu = cu >= 0xd800 && cu < 0xe000
+
   describe "Char.toLower" $ do
 
     -- We test that Char.toLower maps the BMP onto itself, because this implies
@@ -282,19 +285,19 @@ spec = parallel $ do
     -- code units, which allows us to implement lowercasing in an optimized
     -- manner.
     it "maps the Basic Multilingual Plane onto itself" $
-      forM_ [0 .. maxBound :: Aho.CodeUnit] $ \cu -> unless (isSurrogate cu) $
+      forM_ [0 .. maxBound :: Utf16.CodeUnit] $ \cu -> unless (isSurrogate cu) $
         let
           lower = Char.ord $ Char.toLower $ Char.chr $ fromIntegral cu
         in
           lower `shouldSatisfy` not . isSurrogate
 
-  describe "Aho.lowerCodeUnit" $
+  describe "Utf16.lowerCodeUnit" $
     it "is equivalent to Char.toLower on the BMP" $
-      forM_ [0 .. maxBound :: Aho.CodeUnit] $ \cu -> unless (isSurrogate cu) $
+      forM_ [0 .. maxBound :: Utf16.CodeUnit] $ \cu -> unless (isSurrogate cu) $
         let
           lowerAsChar = fromIntegral . Char.ord . Char.toLower . Char.chr . fromIntegral
         in
-          lowerAsChar cu `shouldBe` Aho.lowerCodeUnit cu
+          lowerAsChar cu `shouldBe` Utf16.lowerCodeUnit cu
 
   modifyMaxSize (const 10) $ describe "Replacer.run" $ do
     let

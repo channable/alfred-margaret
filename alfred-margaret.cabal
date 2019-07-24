@@ -33,6 +33,7 @@ library
                      , Data.Text.AhoCorasick.Replacer
                      , Data.Text.AhoCorasick.Searcher
                      , Data.Text.AhoCorasick.Splitter
+                     , Data.Text.Utf16
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , deepseq
