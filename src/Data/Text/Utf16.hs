@@ -23,6 +23,7 @@ module Data.Text.Utf16
   , unpackUtf16
   , unsafeCutUtf16
   , unsafeSliceUtf16
+  , unsafeIndexUtf16
   , indexTextArray
   ) where
 
@@ -119,6 +120,12 @@ unsafeCutUtf16 (CodeUnitIndex !begin) (CodeUnitIndex !length) !text
 {-# INLINE lengthUtf16 #-}
 lengthUtf16 :: Text -> CodeUnitIndex
 lengthUtf16 = CodeUnitIndex . TextUnsafe.lengthWord16
+
+-- | Return the code unit (not character) with the given index.
+-- Note: The boudns are not checked.
+unsafeIndexUtf16 :: Text -> CodeUnitIndex -> CodeUnit
+{-# INLINE unsafeIndexUtf16 #-}
+unsafeIndexUtf16 (Text arr off _) (CodeUnitIndex pos) = indexTextArray arr (pos + off)
 
 -- | Apply a function to each code unit of a text.
 {-# INLINABLE mapUtf16 #-}

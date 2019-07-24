@@ -7,14 +7,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Main where
+module Data.Text.AhoCorasickSpec (spec) where
 
 import Control.DeepSeq (rnf)
 import Control.Monad (forM_, unless)
 import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Word (Word16)
-import Test.Hspec (Spec, Expectation, describe, hspec, it, parallel, shouldBe)
+import Test.Hspec (Spec, Expectation, describe, it, parallel, shouldBe)
 import Test.Hspec.Expectations (shouldMatchList, shouldSatisfy)
 import Test.Hspec.QuickCheck (modifyMaxSuccess, modifyMaxSize, prop)
 import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink, (==>))
@@ -32,14 +32,12 @@ import qualified Test.QuickCheck as QuickCheck
 import qualified Test.QuickCheck.Gen as Gen
 
 import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
+import Data.Text.Orphans ()
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Replacer as Replacer
 import qualified Data.Text.AhoCorasick.Splitter as Splitter
 import qualified Data.Text.Utf16 as Utf16
-
-instance Arbitrary CaseSensitivity where
-  arbitrary = Gen.elements [CaseSensitive, IgnoreCase]
 
 -- | Test that for a single needle which equals the haystack, we find a single
 -- match. Does not apply to the empty needle.
@@ -127,9 +125,6 @@ arbitraryNeedlesHaystack = do
   needles <- Gen.listOf1 (fmap Text.concat genSmall)
   haystack <- fmap Text.concat genBig
   pure (needles, haystack)
-
-main :: IO ()
-main = hspec $ describe "Data.Text.AhoCorasick" spec
 
 spec :: Spec
 spec = parallel $ do
