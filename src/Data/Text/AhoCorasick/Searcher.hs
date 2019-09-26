@@ -21,8 +21,8 @@ module Data.Text.AhoCorasick.Searcher
   , needles
   , numNeedles
   , automaton
+  , caseSensitivity
   , containsAny
-  , containsAnyIgnoreCase
   )
   where
 
@@ -31,6 +31,8 @@ import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
 import Data.Semigroup (Semigroup, (<>))
 import Data.Text (Text)
 import GHC.Generics (Generic)
+
+import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.Utf16 as Utf16
@@ -51,7 +53,8 @@ import qualified Data.Text.Utf16 as Utf16
 --
 -- We also use Hashed to cache the hash of the needles.
 data Searcher v = Searcher
-  { searcherNeedles :: Hashed [(Text, v)]
+  { searcherCaseSensitive :: CaseSensitivity
+  , searcherNeedles :: Hashed [(Text, v)]
   , searcherNumNeedles :: Int
   , searcherAutomaton :: Aho.AcMachine v
   } deriving (Generic)
@@ -66,7 +69,7 @@ instance Hashable v => Hashable (Searcher v) where
 instance Eq v => Eq (Searcher v) where
   -- Since we store the length of the needle list anyway,
   -- we can use it to early out if there is a length mismatch.
-  Searcher xs nx _ == Searcher ys ny _ = (nx, xs) == (ny, ys)
+  Searcher cx xs nx _ == Searcher cy ys ny _ = (nx, xs, cx) == (ny, ys, cy)
   {-# INLINE (==) #-}
 
 instance NFData v => NFData (Searcher v)
@@ -78,19 +81,27 @@ instance NFData v => NFData (Searcher v)
 -- reassign priorities, rather than concatenating the needle lists as-is and
 -- possibly having duplicate priorities in the resulting searcher.
 instance Semigroup (Searcher ()) where
-  x <> y = buildWithValues (needles x <> needles y)
+  x <> y
+    | caseSensitivity x == caseSensitivity y
+      = buildWithValues (searcherCaseSensitive x) (needles x <> needles y)
+    | otherwise = error "Combining searchers of different case sensitivity"
   {-# INLINE (<>) #-}
 
-build :: [Text] -> Searcher ()
-build = buildWithValues . fmap (\x -> (x, ()))
+-- | Builds the Searcher for a list of needles
+-- The caller is responsible that the needles are lower case in case the IgnoreCase
+-- is used for case sensitivity
+build :: CaseSensitivity -> [Text] -> Searcher ()
+build case_ = buildWithValues case_ . fmap (\x -> (x, ()))
 
-buildWithValues :: Hashable v => [(Text, v)] -> Searcher v
+-- | The caller is responsible that the needles are lower case in case the IgnoreCase
+-- is used for case sensitivity
+buildWithValues :: Hashable v => CaseSensitivity -> [(Text, v)] -> Searcher v
 {-# INLINABLE buildWithValues #-}
-buildWithValues ns =
+buildWithValues case_ ns =
   let
     unpack (text, value) = (Utf16.unpackUtf16 text, value)
   in
-    Searcher (hashed ns) (length ns) $ Aho.build $ fmap unpack ns
+    Searcher case_ (hashed ns) (length ns) $ Aho.build $ fmap unpack ns
 
 needles :: Searcher v -> [(Text, v)]
 needles = unhashed . searcherNeedles
@@ -101,8 +112,11 @@ numNeedles = searcherNumNeedles
 automaton :: Searcher v -> Aho.AcMachine v
 automaton = searcherAutomaton
 
+caseSensitivity :: Searcher v -> CaseSensitivity
+caseSensitivity = searcherCaseSensitive
+
 -- | Return whether the haystack contains any of the needles.
--- Is case sensitive.
+-- Case sensitivity depends on the properties of the searcher
 -- This function is marked noinline as an inlining boundary. Aho.runText is
 -- marked inline, so this function will be optimized to report only whether
 -- there is a match, and not construct a list of matches. We don't want this
@@ -116,16 +130,6 @@ containsAny !searcher !text =
   let
     -- On the first match, return True immediately.
     f _acc _match = Aho.Done True
-  in
-    Aho.runText False f (automaton searcher) text
-
--- | Return whether the haystack contains any of the needles.
--- Is case insensitive. The needles in the searcher should be lowercase.
-{-# NOINLINE containsAnyIgnoreCase #-}
-containsAnyIgnoreCase :: Searcher () -> Text -> Bool
-containsAnyIgnoreCase !searcher !text =
-  let
-    -- On the first match, return True immediately.
-    f _acc _match = Aho.Done True
-  in
-    Aho.runLower False f (automaton searcher) text
+  in case caseSensitivity searcher of
+    CaseSensitive  -> Aho.runText False f (automaton searcher) text
+    IgnoreCase      -> Aho.runLower False f (automaton searcher) text

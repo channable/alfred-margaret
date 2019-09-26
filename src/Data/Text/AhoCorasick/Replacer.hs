@@ -77,7 +77,7 @@ data Replacer = Replacer
 build :: CaseSensitivity -> [(Needle, Replacement)] -> Replacer
 build caseSensitivity replaces = Replacer caseSensitivity searcher
   where
-    searcher = Searcher.buildWithValues $ zipWith mapNeedle [0..] replaces
+    searcher = Searcher.buildWithValues caseSensitivity $ zipWith mapNeedle [0..] replaces
     mapNeedle i (needle, replacement) =
       let
         needle' = case caseSensitivity of
@@ -101,7 +101,7 @@ compose (Replacer case1 searcher1) (Replacer case2 searcher2)
         renumber i (needle, Payload _ len replacement) = (needle, Payload (-i) len replacement)
         needles1 = Searcher.needles searcher1
         needles2 = Searcher.needles searcher2
-        searcher = Searcher.buildWithValues $ zipWith renumber [0..] (needles1 ++ needles2)
+        searcher = Searcher.buildWithValues case1 $ zipWith renumber [0..] (needles1 ++ needles2)
       in
         Just $ Replacer case1 searcher
 
