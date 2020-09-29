@@ -30,6 +30,8 @@ module Data.Text.BoyerMoore.Automaton
   , buildAutomaton
   , runText
   , runLower
+  , patternLength
+  , patternText
 
   , CodeUnitIndex (..)
   , Next (..)
@@ -152,6 +154,14 @@ runText = runWithCase CaseSensitive
 {-# INLINE runLower #-}
 runLower :: forall a. a -> (a -> CodeUnitIndex -> Next a) -> Automaton -> Text -> a
 runLower = runWithCase IgnoreCase
+
+-- | Length of the matched pattern measured in Utf16 code units.
+patternLength :: Automaton -> CodeUnitIndex
+patternLength = lengthUtf16 . patternText
+
+-- | Return the pattern that was used to construct the automaton.
+patternText :: Automaton -> Text
+patternText (Automaton pattern _ _) = unhashed pattern
 
 -- | The suffix table tells us for each character of the pattern how many characters we can
 -- jump ahead if the match fails at that point.
