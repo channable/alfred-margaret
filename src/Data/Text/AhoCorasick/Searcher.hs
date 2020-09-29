@@ -25,6 +25,10 @@ module Data.Text.AhoCorasick.Searcher
   , caseSensitivity
   , containsAny
   , setSearcherCaseSensitivity
+  , containsAnyIgnoreCase
+  , containsAllHugeDict
+  , containsAllLT64Dict
+  , containsAll
   )
   where
 
@@ -32,7 +36,10 @@ import Control.DeepSeq (NFData)
 import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
 import Data.Semigroup (Semigroup, (<>))
 import Data.Text (Text)
+import Data.Word
+import Data.Bits
 import GHC.Generics (Generic)
+import qualified Data.IntSet as IS
 
 #if defined(HAS_AESON)
 import Data.Aeson ((.:), (.=))
@@ -159,3 +166,34 @@ containsAny !searcher !text =
   in case caseSensitivity searcher of
     CaseSensitive  -> Aho.runText False f (automaton searcher) text
     IgnoreCase      -> Aho.runLower False f (automaton searcher) text
+
+-- | Return whether the haystack contains any of the needles.
+-- Is case insensitive. The needles in the searcher should be lowercase.
+{-# NOINLINE containsAnyIgnoreCase #-}
+containsAnyIgnoreCase :: Searcher () -> Text -> Bool
+containsAnyIgnoreCase !searcher !text =
+  let
+    -- On the first match, return True immediately.
+    f _acc _match = Aho.Done True
+  in
+    Aho.runLower False f (automaton searcher) text
+
+containsAllHugeDict :: [Text] -> Text -> Bool
+containsAllHugeDict !needles !input = let
+  automat = Aho.build $ zip (Utf16.unpackUtf16 <$> needles) [0..]
+  f acc match = let acc' = IS.delete (Aho.matchValue match) acc
+    in if IS.null acc' then Aho.Done acc' else Aho.Step acc'
+  in IS.null $ Aho.runText (IS.fromList [0..length needles-1]) f automat input
+
+containsAllLT64Dict :: [Text] -> Text -> Bool
+containsAllLT64Dict !needles !input = let
+  automat = Aho.build $ zip (Utf16.unpackUtf16 <$> needles) (bit <$> [0..]) --needles
+  allMatched = (== (bit (length needles) - 1))
+  f :: Word64 -> Aho.Match Word64 -> Aho.Next Word64
+  f !acc match = let step = acc .|. Aho.matchValue match
+    in if allMatched step then Aho.Done step else Aho.Step step
+  in allMatched $ Aho.runText 0 f automat input
+
+{-# INLINE containsAll #-}
+containsAll :: [Text] -> Text -> Bool
+containsAll b = if length b < 64 then containsAllLT64Dict b else containsAllHugeDict b
