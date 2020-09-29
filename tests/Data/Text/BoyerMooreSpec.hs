@@ -11,7 +11,7 @@ import Data.Foldable (for_)
 import Test.Hspec (Spec, Expectation, describe, it, parallel, shouldBe)
 import Test.Hspec.Expectations (shouldMatchList, shouldSatisfy)
 import Test.Hspec.QuickCheck (modifyMaxSuccess, prop)
-import Test.QuickCheck (Arbitrary (shrink), (==>))
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink, (==>))
 import Test.QuickCheck.Instances ()
 import Test.QuickCheck.Gen (Gen)
 import GHC.Stack (HasCallStack)
@@ -25,8 +25,11 @@ import qualified Test.QuickCheck as QuickCheck
 import qualified Test.QuickCheck.Gen as Gen
 
 import Data.Text.Orphans ()
+import Data.Text.BoyerMoore.Automaton (CaseSensitivity (..))
 
+import qualified Data.Text.AhoCorasick.Replacer as AhoReplacer
 import qualified Data.Text.BoyerMoore.Automaton as BoyerMoore
+import qualified Data.Text.BoyerMoore.Replacer as Replacer
 import qualified Data.Text.Utf16 as Utf16
 
 -- | Test that for a single needle which equals the haystack, we find a single
@@ -94,96 +97,113 @@ arbitraryNeedleHaystack = do
   pure (needle, haystack)
 
 spec :: Spec
-spec = parallel $ do
-  modifyMaxSuccess (const 200) $ do
-    describe "build" $ do
-      prop "does not throw exceptions" $ \ (pat :: Text) ->
-        rnf $ BoyerMoore.buildAutomaton pat
+spec = parallel $ modifyMaxSuccess (const 200) $ do
+  describe "build" $ do
+    prop "does not throw exceptions" $ \ (pat :: Text) ->
+      rnf $ BoyerMoore.buildAutomaton pat
 
-    describe "runText" $ do
+  describe "runText" $ do
 
-      describe "when given a needle equal to the haystack" $ do
+    describe "when given a needle equal to the haystack" $ do
 
-        it "reports a single match for a repeated character" $
-          forM_ [1..128] $ \n ->
-            needleIsHaystackMatches $ Text.replicate n "a"
+      it "reports a single match for a repeated character" $
+        forM_ [1..128] $ \n ->
+          needleIsHaystackMatches $ Text.replicate n "a"
 
-        it "reports a single match for non-BMP data" $ do
-          -- Include a few code points outside of the Basic Multilingual Plane,
-          -- which require multible code units to encode.
-          needleIsHaystackMatches "\x000437b8suffix"
-          needleIsHaystackMatches "aaa\359339aaa\95759aa\899256aa"
+      it "reports a single match for non-BMP data" $ do
+        -- Include a few code points outside of the Basic Multilingual Plane,
+        -- which require multible code units to encode.
+        needleIsHaystackMatches "\x000437b8suffix"
+        needleIsHaystackMatches "aaa\359339aaa\95759aa\899256aa"
 
-        prop "reports a single match for random needles" $ \needle ->
-          not (Text.null needle) ==> needleIsHaystackMatches needle
+      prop "reports a single match for random needles" $ \needle ->
+        not (Text.null needle) ==> needleIsHaystackMatches needle
 
-      describe "when given a sliced text (with nonzero internal offset)" $ do
+    describe "when given a sliced text (with nonzero internal offset)" $ do
 
-        it "still reports offset relative to the text start" $
-          -- The match position should be relative to the start of the text "a".
-          -- Even if this text is represented as a slice of "bbba" internally.
-          matchEndPositions "a" (Text.dropWhile (== 'b') "bbba") `shouldMatchList` [1]
+      it "still reports offset relative to the text start" $
+        -- The match position should be relative to the start of the text "a".
+        -- Even if this text is represented as a slice of "bbba" internally.
+        matchEndPositions "a" (Text.dropWhile (== 'b') "bbba") `shouldMatchList` [1]
 
-      describe "when given non-ascii inputs" $ do
+    describe "when given non-ascii inputs" $ do
 
-        -- We have a special lookup table for bad character shifts for
-        -- the first 128 code units, which is always hit for ascii inputs.
-        -- Also exercise the fallback code path with a different input.
-        it "reports a match if the haystack contains a character > U+7f" $ do
-          matchEndPositions "eclair" "éclaireclair" `shouldMatchList` [12]
-          matchEndPositions "éclair" "éclaireclair" `shouldMatchList` [6]
-          matchEndPositions "éclair" "eclairéclair" `shouldMatchList` [12]
+      -- We have a special lookup table for bad character shifts for
+      -- the first 128 code units, which is always hit for ascii inputs.
+      -- Also exercise the fallback code path with a different input.
+      it "reports a match if the haystack contains a character > U+7f" $ do
+        matchEndPositions "eclair" "éclaireclair" `shouldMatchList` [12]
+        matchEndPositions "éclair" "éclaireclair" `shouldMatchList` [6]
+        matchEndPositions "éclair" "eclairéclair" `shouldMatchList` [12]
 
-        it "reports the correct UTF-16 index for surrogate pairs" $ do
-          -- Note that the index after the match is 2, even though there is
-          -- only a single code point. U+1d11e is encoded as two code units
-          -- in UTF-16.
-          matchEndPositions "𝄞" "𝄞" `shouldMatchList` [2]
+      it "reports the correct UTF-16 index for surrogate pairs" $ do
+        -- Note that the index after the match is 2, even though there is
+        -- only a single code point. U+1d11e is encoded as two code units
+        -- in UTF-16.
+        matchEndPositions "𝄞" "𝄞" `shouldMatchList` [2]
 
-          -- A leviating woman in business suit with dark skin tone needs a
-          -- whopping 5 code points to encode, of which the first two need a
-          -- surrogate pair in UTF-16, for a total of 7 code units.
-          -- U+1f574: man in business suit levitating
-          -- U+1f3ff: emoji modifier Fitzpatrick type-6
-          -- U+200d:  zero width joiner
-          -- U+2640:  female sign
-          -- U+fe0f:  variation selector-16
-          -- A peculiar feature of Unicode emoji, is that the male levivating
-          -- man in business suit with dark skin tone is a substring of the
-          -- levivating woman in business suit. And the levivating man in
-          -- business suit without particular skin tone is a substring of that.
+        -- A leviating woman in business suit with dark skin tone needs a
+        -- whopping 5 code points to encode, of which the first two need a
+        -- surrogate pair in UTF-16, for a total of 7 code units.
+        -- U+1f574: man in business suit levitating
+        -- U+1f3ff: emoji modifier Fitzpatrick type-6
+        -- U+200d:  zero width joiner
+        -- U+2640:  female sign
+        -- U+fe0f:  variation selector-16
+        -- A peculiar feature of Unicode emoji, is that the male levivating
+        -- man in business suit with dark skin tone is a substring of the
+        -- levivating woman in business suit. And the levivating man in
+        -- business suit without particular skin tone is a substring of that.
+        let
+          examples =
+            [ ("\x1f574\x1f3ff\x200d\x2640\xfe0f", 7)
+            , ("\x1f574\x1f3ff", 4)
+            , ("\x1f574", 2)
+            ]
+        for_ examples $ \(needle, endPos) ->
+          matchEndPositions needle "\x1f574\x1f3ff\x200d\x2640\xfe0f" `shouldMatchList` [endPos]
+
+    describe "when given empty needle" $ do
+
+      it "does not report a match" $ do
+        matchEndPositions "" "" `shouldMatchList` []
+        matchEndPositions "" "foo" `shouldMatchList` []
+
+    describe "kitchen sink" $ do
+      it "kitchen sinks" $ do
+        matchEndPositions "\"\SO]JL\"" "aaaaa\"\SO]JL\"" `shouldMatchList` [11]
+        matchEndPositions "\"X]JL\"" "aaaaa\"X]JL\"" `shouldMatchList` [11]
+
+    describe "when given random needles and haystacks" $ do
+
+      prop "reports only infixes of the haystack" $
+        QuickCheck.forAllShrink arbitraryNeedleHaystack shrink $ \ (needle, haystack) ->
           let
-            examples =
-              [ ("\x1f574\x1f3ff\x200d\x2640\xfe0f", 7)
-              , ("\x1f574\x1f3ff", 4)
-              , ("\x1f574", 2)
-              ]
-          for_ examples $ \(needle, endPos) ->
-            matchEndPositions needle "\x1f574\x1f3ff\x200d\x2640\xfe0f" `shouldMatchList` [endPos]
+            matches = boyerMatch needle haystack
+            sliceMatch startPos len = Utf16.unsafeSliceUtf16 startPos len haystack
+          in
+            forM_ matches $ \pos -> do
+              needle `shouldSatisfy` (`Text.isInfixOf` haystack)
+              sliceMatch (Utf16.CodeUnitIndex pos) (Utf16.lengthUtf16 needle) `shouldBe` needle
 
-      describe "when given empty needle" $ do
+      prop "reports all infixes of the haystack" $
+        QuickCheck.forAllShrink arbitraryNeedleHaystack shrink $ \ (needle, haystack) ->
+          matchEndPositions needle haystack `shouldMatchList` naiveMatchPositions needle haystack
 
-        it "does not report a match" $ do
-          matchEndPositions "" "" `shouldMatchList` []
-          matchEndPositions "" "foo" `shouldMatchList` []
+  describe "replaceSingleLimited" $ do
 
-      describe "kitchen sink" $ do
-        it "kitchen sinks" $ do
-          matchEndPositions "\"\SO]JL\"" "aaaaa\"\SO]JL\"" `shouldMatchList` [11]
-          matchEndPositions "\"X]JL\"" "aaaaa\"X]JL\"" `shouldMatchList` [11]
+    prop "is equivalent to Aho-Corasick replacer with a single needle" $
+      forAllShrink arbitraryNeedleHaystack shrink $ \(needle, haystack) ->
+      forAllShrink arbitrary shrink $ \replacement ->
+      forAll arbitrary $ \case_ ->
+      let
+        expected = AhoReplacer.run (AhoReplacer.build case_ [(needle, replacement)]) haystack
 
-      describe "when given random needles and haystacks" $ do
+        auto = BoyerMoore.buildAutomaton $ case case_ of
+          IgnoreCase -> Utf16.lowerUtf16 needle
+          CaseSensitive -> needle
 
-        prop "reports only infixes of the haystack" $
-          QuickCheck.forAllShrink arbitraryNeedleHaystack shrink $ \ (needle, haystack) ->
-            let
-              matches = boyerMatch needle haystack
-              sliceMatch startPos len = Utf16.unsafeSliceUtf16 startPos len haystack
-            in
-              forM_ matches $ \pos -> do
-                needle `shouldSatisfy` (`Text.isInfixOf` haystack)
-                sliceMatch (Utf16.CodeUnitIndex pos) (Utf16.lengthUtf16 needle) `shouldBe` needle
+        actual = Replacer.replaceSingleLimited case_ auto replacement haystack maxBound
+      in
+        actual `shouldBe` Just expected
 
-        prop "reports all infixes of the haystack" $
-          QuickCheck.forAllShrink arbitraryNeedleHaystack shrink $ \ (needle, haystack) ->
-            matchEndPositions needle haystack `shouldMatchList` naiveMatchPositions needle haystack
