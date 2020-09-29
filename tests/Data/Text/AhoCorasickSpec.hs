@@ -294,6 +294,27 @@ spec = parallel $ do
         in
           lowerAsChar cu `shouldBe` Utf16.lowerCodeUnit cu
 
+  describe "Char.toUpper" $ do
+
+    -- We test that Char.toUpper maps the BMP onto itself, because this implies
+    -- that changing casing code unit by code unit does not change the number of
+    -- code units, which allows us to implement upppercasing in an optimized
+    -- manner.
+    it "maps the Basic Multilingual Plane onto itself" $
+      forM_ [0 .. maxBound :: Utf16.CodeUnit] $ \cu -> unless (isSurrogate cu) $
+        let
+          upper = Char.ord $ Char.toUpper $ Char.chr $ fromIntegral cu
+        in
+          upper `shouldSatisfy` not . isSurrogate
+
+  describe "Utf16.upperCodeUnit" $
+    it "is equivalent to Char.toUpper on the BMP" $
+      forM_ [0 .. maxBound :: Utf16.CodeUnit] $ \cu -> unless (isSurrogate cu) $
+        let
+          upperAsChar = fromIntegral . Char.ord . Char.toUpper . Char.chr . fromIntegral
+        in
+          upperAsChar cu `shouldBe` Utf16.upperCodeUnit cu
+
   modifyMaxSize (const 10) $ describe "Replacer.run" $ do
     let
       genHaystack = fmap Text.pack $ Gen.listOf $ Gen.frequency [(40, Gen.elements "abAB"), (1, pure 'İ'), (1, arbitrary)]

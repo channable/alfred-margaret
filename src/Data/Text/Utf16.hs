@@ -18,6 +18,8 @@ module Data.Text.Utf16
   , lengthUtf16
   , lowerUtf16
   , lowerCodeUnit
+  , upperUtf16
+  , upperCodeUnit
   , isCaseInvariant
   , unpackUtf16
   , unsafeCutUtf16
@@ -189,6 +191,20 @@ lowerCodeUnit cu
   -- like the input. This property was verified by exhaustive testing; see
   -- also the test in AhoCorasickSpec.hs.
   | otherwise = fromIntegral $ Char.ord $ Char.toLower $ Char.chr $ fromIntegral cu
+
+{-# INLINE upperUtf16 #-}
+upperUtf16 :: Text -> Text
+upperUtf16 = mapUtf16 upperCodeUnit
+
+{-# INLINE upperCodeUnit #-}
+upperCodeUnit :: CodeUnit -> CodeUnit
+upperCodeUnit cu
+  -- Analogous implementation to lowerCodeUnit
+  | fromIntegral cu >= Char.ord 'a' && fromIntegral cu <= Char.ord 'z'
+    = cu - fromIntegral (Char.ord 'a' - Char.ord 'A')
+  | cu <= 127 = cu
+  | cu >= 0xd800 && cu < 0xe000 = cu
+  | otherwise = fromIntegral $ Char.ord $ Char.toUpper $ Char.chr $ fromIntegral cu
 
 -- | Return whether text is the same lowercase as uppercase, such that this
 -- function will not return true when Aho–Corasick would differentiate when
