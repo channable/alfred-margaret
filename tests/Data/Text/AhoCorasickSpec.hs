@@ -161,7 +161,7 @@ spec = parallel $ do
         prop "reports a single match for random needles" $ \needle ->
           not (Text.null needle) ==> needleIsHaystackMatches needle
 
-      describe "when given a sliced text (with nonzero internal offset)" $ do
+      describe "when given a sliced text (with nonzero internal offset)" $
 
         it "still reports offset relative to the text start" $
           -- The match position should be relative to the start of the text "a".
@@ -184,7 +184,7 @@ spec = parallel $ do
           -- in UTF-16.
           matchPositions ["𝄞"] "𝄞" `shouldMatchList` [2]
 
-          -- A leviating woman in business suit with dark skin tone needs a
+          -- A levitating woman in business suit with dark skin tone needs a
           -- whopping 5 code points to encode, of which the first two need a
           -- surrogate pair in UTF-16, for a total of 7 code units.
           -- U+1f574: man in business suit levitating
@@ -192,9 +192,9 @@ spec = parallel $ do
           -- U+200d:  zero width joiner
           -- U+2640:  female sign
           -- U+fe0f:  variation selector-16
-          -- A peculiar feature of Unicode emoji, is that the male levivating
+          -- A peculiar feature of Unicode emoji, is that the male levitating
           -- man in business suit with dark skin tone is a substring of the
-          -- levivating woman in business suit. And the levivating man in
+          -- levitating woman in business suit. And the levitating man in
           -- business suit without particular skin tone is a substring of that.
           matchPositions
             [ "\x1f574\x1f3ff\x200d\x2640\xfe0f"
@@ -210,15 +210,15 @@ spec = parallel $ do
           matchPositions ["foobar", "foo"] "xfoobarbazy" `shouldMatchList` [7, 4]
 
         it "keeps the value associated with a needle" $ do
-          (fmap Aho.matchValue $ ahoMatch [("foo", 'A'), ("bar", 'B')] "foobar")
+          fmap Aho.matchValue (ahoMatch [("foo", 'A'), ("bar", 'B')] "foobar")
             `shouldMatchList` ['A', 'B']
-          (fmap Aho.matchValue $ ahoMatch [("foo", 'A'), ("bar", 'B')] "foobaz")
+          fmap Aho.matchValue (ahoMatch [("foo", 'A'), ("bar", 'B')] "foobaz")
             `shouldMatchList` ['A']
-          (fmap Aho.matchValue $ ahoMatch [("foo", 'A'), ("bar", 'B')] "foebar")
+          fmap Aho.matchValue (ahoMatch [("foo", 'A'), ("bar", 'B')] "foebar")
             `shouldMatchList` ['B']
 
-        it "reports both matches in case of a duplicate needle" $ do
-          (fmap Aho.matchValue $ ahoMatch [("foo", 'A'), ("foo", 'B')] "foobar")
+        it "reports both matches in case of a duplicate needle" $
+          fmap Aho.matchValue (ahoMatch [("foo", 'A'), ("foo", 'B')] "foobar")
             `shouldMatchList` ['A', 'B']
 
         it "finds all quadratic matches" $
@@ -342,8 +342,8 @@ spec = parallel $ do
       replace [("BB", ""), ("BBBB", "bingo")] "BBBB" `shouldBe` ""
 
     it "replaces needles that contain a surrogate pair" $
-      replace [("\x1f574", "levivating man in business suit")]
-        "the \x1f574" `shouldBe` "the levivating man in business suit"
+      replace [("\x1f574", "levitating man in business suit")]
+        "the \x1f574" `shouldBe` "the levitating man in business suit"
 
     it "replaces all occurrences case-insensitively" $ do
       replaceIgnoreCase [("A", "B")] "AXAXB" `shouldBe` "BXBXB"
@@ -366,8 +366,8 @@ spec = parallel $ do
     it "matches surrogate pairs case-insensitively" $ do
       -- We can't lowercase a levivating man in business suit, but that should
       -- not affect whether we match it or not.
-      replaceIgnoreCase [("\x1f574", "levivating man in business suit")]
-        "the \x1f574" `shouldBe` "the levivating man in business suit"
+      replaceIgnoreCase [("\x1f574", "levitating man in business suit")] "the \x1f574"
+        `shouldBe` "the levitating man in business suit"
 
     prop "satisfies (run . compose a b) == (run b (run a))" $
       forAllShrink genHaystack shrink $ \haystack ->
