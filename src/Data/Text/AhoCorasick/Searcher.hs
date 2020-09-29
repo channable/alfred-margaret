@@ -7,7 +7,7 @@
 -- See AhoCorasick.Automaton for more info about these GHC flags.
 -- TL;DR: They make things faster, and we need the flags here because the
 -- functions from that module may be inlined into this module.
-{-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fno-ignore-asserts #-}
+{-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fignore-asserts #-}
 
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveAnyClass #-}
