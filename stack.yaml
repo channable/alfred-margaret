@@ -1,3 +1,6 @@
-resolver: lts-13.10
+resolver: lts-16.14
 packages:
 - .
+nix:
+  enable: true
+  packages: [llvm]
