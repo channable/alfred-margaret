@@ -10,8 +10,10 @@
 {-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fignore-asserts #-}
 
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Data.Text.AhoCorasick.Searcher
   ( Searcher
@@ -31,6 +33,11 @@ import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
 import Data.Semigroup (Semigroup, (<>))
 import Data.Text (Text)
 import GHC.Generics (Generic)
+
+#if defined(HAS_AESON)
+import Data.Aeson ((.:), (.=))
+import qualified Data.Aeson as AE
+#endif
 
 import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
 
@@ -58,6 +65,17 @@ data Searcher v = Searcher
   , searcherNumNeedles :: Int
   , searcherAutomaton :: Aho.AcMachine v
   } deriving (Generic)
+
+#if defined(HAS_AESON)
+instance AE.ToJSON v => AE.ToJSON (Searcher v) where
+  toJSON s = AE.object
+    [ "needles" .= needles s
+    , "caseSensitivity" .= caseSensitivity s
+    ]
+
+instance (Hashable v, AE.FromJSON v) => AE.FromJSON (Searcher v) where
+  parseJSON = AE.withObject "Searcher" $ \o -> buildWithValues <$> o .: "caseSensitivity" <*> o .: "needles"
+#endif
 
 instance Show (Searcher v) where
   show _ = "Searcher _ _ _"

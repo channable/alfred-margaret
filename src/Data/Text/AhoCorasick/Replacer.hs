@@ -7,6 +7,7 @@
 -- See Automaton.hs for why these GHC flags are here.
 {-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fignore-asserts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -30,6 +31,10 @@ import Data.List (sort)
 import Data.Maybe (fromJust)
 import Data.Text (Text)
 import GHC.Generics (Generic)
+
+#if defined(HAS_AESON)
+import qualified Data.Aeson as AE
+#endif
 
 import qualified Data.Text as Text
 
@@ -55,7 +60,12 @@ data Payload = Payload
   { needlePriority    :: {-# UNPACK #-} !Priority
   , needleLength      :: {-# UNPACK #-} !CodeUnitIndex
   , needleReplacement :: !Replacement
-  } deriving (Eq, Generic, Hashable, NFData, Show)
+  }
+#if defined(HAS_AESON)
+  deriving (Eq, Generic, Hashable, NFData, Show, AE.FromJSON, AE.ToJSON)
+#else
+  deriving (Eq, Generic, Hashable, NFData, Show)
+#endif
 
 -- | A state machine used for efficient replacements with many different needles.
 data Replacer = Replacer
@@ -63,7 +73,11 @@ data Replacer = Replacer
   , replacerSearcher :: Searcher Payload
   }
   deriving stock (Show, Eq, Generic)
-  deriving anyclass (Hashable, NFData)
+#if defined(HAS_AESON)
+  deriving (Hashable, NFData, AE.FromJSON, AE.ToJSON)
+#else
+  deriving (Hashable, NFData)
+#endif
 
 -- | Build an Aho-Corasick automaton that can be used for performing fast
 -- sequential replaces.

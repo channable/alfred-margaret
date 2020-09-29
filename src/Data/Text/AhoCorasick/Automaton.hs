@@ -11,6 +11,7 @@
 -- have not been violated.
 {-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fignore-asserts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -57,6 +58,10 @@ import Data.Text.Internal (Text (..))
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
+#if defined(HAS_AESON)
+import Data.Aeson (FromJSON, ToJSON)
+#endif
+
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import qualified Data.Vector as Vector
@@ -68,7 +73,11 @@ data CaseSensitivity
   = CaseSensitive
   | IgnoreCase
   deriving stock (Eq, Generic, Show)
+#if defined(HAS_AESON)
+  deriving anyclass (Hashable, NFData, FromJSON, ToJSON)
+#else
   deriving anyclass (Hashable, NFData)
+#endif
 
 -- | A numbered state in the Aho-Corasick automaton.
 type State = Int

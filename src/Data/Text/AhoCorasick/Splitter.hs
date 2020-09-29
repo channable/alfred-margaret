@@ -5,6 +5,7 @@
 -- repository root.
 
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 
 -- | Splitting strings using Aho–Corasick.
 module Data.Text.AhoCorasick.Splitter
@@ -24,6 +25,10 @@ import Data.Hashable (Hashable (..))
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text (Text)
 
+#if defined(HAS_AESON)
+import qualified Data.Aeson as AE
+#endif
+
 import qualified Data.List.NonEmpty as NonEmpty
 
 import Data.Text.AhoCorasick.Automaton (AcMachine)
@@ -40,6 +45,14 @@ data Splitter =
     { splitterAutomaton :: AcMachine () -- INVARIANT: Exactly one needle.
     , splitterSeparator :: Text         -- INVARIANT: Equivalent to needle.
     }
+
+#if defined(HAS_AESON)
+instance AE.ToJSON Splitter where
+  toJSON = AE.toJSON . separator
+
+instance AE.FromJSON Splitter where
+  parseJSON v = build <$> AE.parseJSON v
+#endif
 
 -- | Construct a splitter with a single separator.
 {-# INLINE build #-}

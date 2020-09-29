@@ -5,6 +5,7 @@
 -- repository root.
 
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -38,6 +39,10 @@ import Data.Text.Internal (Text (..))
 import Data.Word (Word16)
 import GHC.Generics (Generic)
 
+#if defined(HAS_AESON)
+import qualified Data.Aeson as AE
+#endif
+
 import qualified Data.Char as Char
 import qualified Data.Text as Text
 import qualified Data.Text.Array as TextArray
@@ -56,7 +61,12 @@ newtype CodeUnitIndex = CodeUnitIndex
   { codeUnitIndex :: Int
   }
   deriving stock (Eq, Ord, Show, Generic, Bounded)
+#if defined(HAS_AESON)
+  deriving newtype (Hashable, Num, NFData, AE.FromJSON, AE.ToJSON)
+#else
   deriving newtype (Hashable, Num, NFData)
+#endif
+
 
 -- | Return a Text as a list of UTF-16 code units.
 {-# INLINABLE unpackUtf16 #-}

@@ -8,6 +8,7 @@
 -- LLVM produces about 20% faster code.
 {-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fignore-asserts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -43,9 +44,13 @@ import Prelude hiding (length)
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
 import Control.Monad.ST (runST)
+import Data.Hashable (Hashable (..), Hashed, hashed, unhashed)
 import Data.Text.Internal (Text (..))
 import GHC.Generics (Generic)
 
+#if defined(HAS_AESON)
+import qualified Data.Aeson as AE
+#endif
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Vector.Unboxed as UVector
 import qualified Data.Vector.Unboxed.Mutable as UMVector
@@ -64,15 +69,29 @@ import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), lengthUtf16, lowerCodeUnit
 -- finding @aaaa@ in @aaaaa....aaaaaa@ as for each match it would scan back the whole /m/ characters
 -- of the pattern.
 data Automaton = Automaton
-  { automatonPattern :: Text
+  { automatonPattern :: Hashed Text
   , automatonSuffixTable :: SuffixTable
   , automatonBadCharTable :: BadCharTable
   }
   deriving stock (Generic, Show)
   deriving anyclass (NFData)
 
+instance Hashable Automaton where
+  hashWithSalt salt (Automaton pattern _ _) = hashWithSalt salt pattern
+
+instance Eq Automaton where
+  (Automaton pat1 _ _) == (Automaton pat2 _ _) = pat1 == pat2
+
+#if defined(HAS_AESON)
+instance AE.FromJSON Automaton where
+  parseJSON v = buildAutomaton <$> AE.parseJSON v
+
+instance AE.ToJSON Automaton where
+  toJSON = AE.toJSON . unhashed . automatonPattern
+#endif
+
 buildAutomaton :: Text -> Automaton
-buildAutomaton pattern = Automaton pattern (buildSuffixTable pattern) (buildBadCharTable pattern)
+buildAutomaton pattern = Automaton (hashed pattern) (buildSuffixTable pattern) (buildBadCharTable pattern)
 
 runWithCase
   :: forall a
@@ -87,7 +106,8 @@ runWithCase caseSensitivity seed f automaton text
   | patLen == 0 = seed
   | otherwise = go seed (patLen - 1)
   where
-    Automaton pattern suffixTable badCharTable = automaton
+    Automaton patternHashed suffixTable badCharTable = automaton
+    pattern = unhashed patternHashed
     patLen = lengthUtf16 pattern
     stringLen = lengthUtf16 text
 
