@@ -364,12 +364,13 @@ buildBadCharTable pattern = runST $ do
 -- | Read from a lookup table at the specified index.
 indexTable :: UVector.Unbox a => UVector.Vector a -> Int -> a
 {-# INLINE indexTable #-}
-indexTable = (UVector.!) -- UVector.unsafeIndex
-
+indexTable = UVector.unsafeIndex
 
 -- | Read from a lookup table at the specified index.
 indexCodePoint :: Text -> CodeUnitIndex -> CodeUnit
 {-# INLINE indexCodePoint #-}
-indexCodePoint text index
+indexCodePoint text index = unsafeIndexUtf16 text index
+  {-
   | index < 0 || index >= lengthUtf16 text = error $ "Index out of bounds " ++ show index
   | otherwise = unsafeIndexUtf16 text index
+  -}
