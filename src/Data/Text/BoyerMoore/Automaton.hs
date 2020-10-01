@@ -4,9 +4,6 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
--- Compile this module with LLVM, rather than with the default code generator.
--- LLVM produces about 20% faster code.
-{-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fignore-asserts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
