@@ -32,6 +32,13 @@ Flag aeson
     Manual: False
     Default: True
 
+-- Compile this package with LLVM, rather than with the default code generator.
+-- LLVM produces about 20% faster code.
+Flag llvm
+  Description: Compile with LLVM
+  Manual: True
+  Default: True
+
 library
   hs-source-dirs:      src
   exposed-modules:     Data.Text.AhoCorasick.Automaton
@@ -56,6 +63,9 @@ library
   if flag(aeson) {
   build-depends:       aeson
   cpp-options:         -DHAS_AESON
+  }
+  if flag(llvm) {
+  ghc-options:         -fllvm -optlo=-O3 -optlo=-tailcallelim
   }
 
 test-suite test-suite
