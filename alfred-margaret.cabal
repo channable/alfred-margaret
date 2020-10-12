@@ -45,7 +45,6 @@ library
                      , Data.Text.BoyerMoore.Searcher
                      , Data.Text.Utf16
   build-depends:       base >= 4.7 && < 5
-                     , aeson
                      , containers
                      , deepseq
                      , hashable
