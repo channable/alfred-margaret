@@ -79,22 +79,22 @@ unpackUtf16 (Text u16data offset length) =
     go offset length
 
 -- | Return whether the code unit at the given index starts a surrogate pair.
--- Such a code unit must be followed by a high surrogate in valid UTF-16.
+-- Such a code unit must be followed by a low surrogate in valid UTF-16.
 -- Returns false on out of bounds indices.
-{-# INLINE isLowSurrogate #-}
-isLowSurrogate :: Int -> Text -> Bool
-isLowSurrogate !i (Text !u16data !offset !len) =
+{-# INLINE isHighSurrogate #-}
+isHighSurrogate :: Int -> Text -> Bool
+isHighSurrogate !i (Text !u16data !offset !len) =
   let
     w = indexTextArray u16data (offset + i)
   in
     i >= 0 && i < len && w >= 0xd800 && w <= 0xdbff
 
 -- | Return whether the code unit at the given index ends a surrogate pair.
--- Such a code unit must be preceded by a low surrogate in valid UTF-16.
+-- Such a code unit must be preceded by a high surrogate in valid UTF-16.
 -- Returns false on out of bounds indices.
-{-# INLINE isHighSurrogate #-}
-isHighSurrogate :: Int -> Text -> Bool
-isHighSurrogate !i (Text !u16data !offset !len) =
+{-# INLINE isLowSurrogate #-}
+isLowSurrogate :: Int -> Text -> Bool
+isLowSurrogate !i (Text !u16data !offset !len) =
   let
     w = indexTextArray u16data (offset + i)
   in
@@ -111,8 +111,8 @@ isHighSurrogate !i (Text !u16data !offset !len) =
 unsafeSliceUtf16 :: CodeUnitIndex -> CodeUnitIndex -> Text -> Text
 unsafeSliceUtf16 (CodeUnitIndex !begin) (CodeUnitIndex !length) !text
   = assert (begin + length <= TextUnsafe.lengthWord16 text)
-  $ assert (not $ isHighSurrogate begin text)
-  $ assert (not $ isLowSurrogate (begin + length - 1) text)
+  $ assert (not $ isLowSurrogate begin text)
+  $ assert (not $ isHighSurrogate (begin + length - 1) text)
   $ TextUnsafe.takeWord16 length $ TextUnsafe.dropWord16 begin text
 
 -- | The complement of `unsafeSliceUtf16`: removes the slice, and returns the
@@ -121,8 +121,8 @@ unsafeSliceUtf16 (CodeUnitIndex !begin) (CodeUnitIndex !length) !text
 unsafeCutUtf16 :: CodeUnitIndex -> CodeUnitIndex -> Text -> (Text, Text)
 unsafeCutUtf16 (CodeUnitIndex !begin) (CodeUnitIndex !length) !text
   = assert (begin + length <= TextUnsafe.lengthWord16 text)
-  $ assert (not $ isHighSurrogate begin text)
-  $ assert (not $ isLowSurrogate (begin + length - 1) text)
+  $ assert (not $ isLowSurrogate begin text)
+  $ assert (not $ isHighSurrogate (begin + length - 1) text)
     ( TextUnsafe.takeWord16 begin text
     , TextUnsafe.dropWord16 (begin + length) text
     )
