@@ -28,6 +28,15 @@ Flag aeson
     Manual: False
     Default: True
 
+-- Compile this package with LLVM, rather than with the default code generator.
+-- LLVM produces about 20% faster code.
+Flag llvm
+  Description: Compile with LLVM
+  Manual: True
+  -- Defaulting to false makes the package buildable by Hackage,
+  -- allowing the documentation to be generated for us.
+  Default: False
+
 library
   hs-source-dirs:      src
   exposed-modules:     Data.Text.AhoCorasick.Automaton
@@ -46,11 +55,14 @@ library
                      , text
                      , unordered-containers
                      , vector
-  ghc-options:         -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
+  ghc-options:         -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -O2
   default-language:    Haskell2010
   if flag(aeson) {
   build-depends:       aeson
   cpp-options:         -DHAS_AESON
+  }
+  if flag(llvm) {
+  ghc-options:         -fllvm -optlo=-O3 -optlo=-tailcallelim
   }
 
 test-suite test-suite

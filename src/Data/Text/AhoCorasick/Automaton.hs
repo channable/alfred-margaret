@@ -4,12 +4,6 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
--- Compile this module with LLVM, rather than with the default code generator.
--- LLVM produces about 20% faster code.
--- We pass -fignore-asserts to improve performance: we ran this code with
--- asserts enabled in production for two months, and in this time, the asserts
--- have not been violated.
-{-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim -fignore-asserts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
