@@ -1,0 +1,6 @@
+maven_jar(
+    name = "hankcs_aho_corasick",
+    artifact = "com.hankcs:aho-corasick-double-array-trie:1.2.0",
+    sha1 = "7b75748bad8e193cc048a7fb0c71605e300b2286",
+    sha1_src = "eaea57776bea89b6067fe75473445a878e4b3469",
+)

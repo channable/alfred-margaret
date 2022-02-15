@@ -1,0 +1,16 @@
+data/*.txt
+!data/example.txt
+data/*.tar.xz
+*.stats
+*.results
+
+java/bazel-bin
+java/bazel-genfiles
+java/bazel-java
+java/bazel-out
+java/bazel-testlogs
+
+haskell/ac-bench.cabal
+haskell/.stack-work
+
+rust/target/

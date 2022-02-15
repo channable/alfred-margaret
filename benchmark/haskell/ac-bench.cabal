@@ -1,0 +1,45 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.6.
+--
+-- see: https://github.com/sol/hpack
+
+name:           ac-bench
+version:        0
+synopsis:       Benchmark code for alfred-margaret
+description:    Benchmark code for alfred-margaret
+category:       Other
+homepage:       https://github.com/channable/alfred-margaret#readme
+bug-reports:    https://github.com/channable/alfred-margaret/issues
+maintainer:     Channable
+build-type:     Simple
+extra-source-files:
+    package.yaml
+
+source-repository head
+  type: git
+  location: https://github.com/channable/alfred-margaret
+
+library
+  other-modules:
+      Paths_ac_bench
+  ghc-options: -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -j4 +RTS -A64m -RTS
+  build-depends:
+      base
+  default-language: Haskell2010
+
+executable ac-bench
+  main-is: Main.hs
+  other-modules:
+      Paths_ac_bench
+  hs-source-dirs:
+      app/
+  ghc-options: -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -j4 +RTS -A64m -RTS -rtsopts -threaded "-with-rtsopts=-I0 -T -N -A32m -n4m -qg"
+  build-depends:
+      alfred-margaret
+    , base
+    , bytestring
+    , clock
+    , deepseq
+    , text
+  default-language: Haskell2010
