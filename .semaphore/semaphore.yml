@@ -1,0 +1,27 @@
+version: v1.0
+name: "Semaphore pipeline for alfred-margaret"
+
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+
+auto_cancel:
+  running:
+    when: "branch != 'master'"
+
+blocks:
+  - name: Stack
+    task:
+      prologue:
+        commands:
+          - sudo apt-get install haskell-stack
+          - stack upgrade
+
+      jobs:
+        - name: Build alfred-margaret
+          commands:
+            - stack build
+        - name: Test alfred-margaret
+          commands:
+            - stack test
