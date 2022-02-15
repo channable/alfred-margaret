@@ -75,3 +75,27 @@ Run the benchmark using the compiled binary:
 ```
 ./benchmark.py haskell/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix alfred-margaret
 ```
+
+## Inspecting the Results
+
+Once you have a bunch of `.stats` files, you can inspect the results using `report.py`:
+
+```
+./report.py haskell.stats rust.stats java.stats python.stats
+# Will print something like (depending on your machine...)
+haskell.stats:
+  mean time: 3.718 ± 0.020 seconds
+   min time: 3.586 seconds
+
+rust.stats:
+  mean time: 4.771 ± 0.013 seconds
+   min time: 4.685 seconds
+
+java.stats:
+  mean time: 7.452 ± 0.090 seconds
+   min time: 7.143 seconds
+
+python.stats:
+  mean time: 11.370 ± 0.057 seconds
+   min time: 10.973 seconds
+```

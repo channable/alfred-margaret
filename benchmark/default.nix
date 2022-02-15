@@ -4,6 +4,7 @@ pkgs.mkShell {
         # For benchmark code
         (pkgs.python3.withPackages (pyPkgs: [
             pyPkgs.clize
+            pyPkgs.numpy
         ]))
 
         # For rust implementation

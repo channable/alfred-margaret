@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 """
 Report the results of a benchmark run recorded by benchmark.py.
