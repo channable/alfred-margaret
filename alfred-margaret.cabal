@@ -47,6 +47,8 @@ library
                      , Data.Text.BoyerMoore.Replacer
                      , Data.Text.BoyerMoore.Searcher
                      , Data.Text.Utf16
+                     , Data.Text.Utf8
+                     , Data.Text.Utf8.AhoCorasick.Automaton
   build-depends:
       base             >= 4.7 && < 5
     , containers       >= 0.6 && < 0.7
@@ -71,6 +73,7 @@ test-suite test-suite
   main-is:             Main.hs
   other-modules:       Data.Text.AhoCorasickSpec
                      , Data.Text.BoyerMooreSpec
+                     , Data.Text.Utf8.AhoCorasickSpec
                      , Data.Text.Orphans
   hs-source-dirs:      tests
   ghc-options:         -Wall -Wincomplete-record-updates -Wno-orphans
@@ -80,6 +83,7 @@ test-suite test-suite
                      , deepseq
                      , hspec
                      , hspec-expectations
+                     , primitive
                      , quickcheck-instances
                      , text
   default-language:    Haskell2010
