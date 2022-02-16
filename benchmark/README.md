@@ -73,7 +73,7 @@ stack build
 Run the benchmark using the compiled binary:
 
 ```
-./benchmark.py haskell/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix alfred-margaret
+./benchmark.py haskell/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix haskell
 ```
 
 ## Inspecting the Results
