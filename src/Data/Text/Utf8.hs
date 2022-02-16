@@ -4,7 +4,7 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
-module Data.Text.Utf8 (CodeUnit, CodeUnitIndex, unpackUtf8, stringToByteArray) where
+module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), unpackUtf8, stringToByteArray, indexTextArray) where
 
 
 import           Data.Bits                (shiftR, (.&.), (.|.))

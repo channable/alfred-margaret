@@ -10,14 +10,16 @@
 -- | UTF-8 version of 'Data.Text.AhoCorasick.Automaton'
 module Data.Text.Utf8.AhoCorasick.Automaton where
 
-import           Data.Bits                (Bits (shiftL, (.|.)))
+import           Data.Bits                (Bits (shiftL, shiftR, (.&.), (.|.)))
 import           Data.Char                (chr)
 import           Data.Foldable            (foldl')
 import           Data.IntMap.Strict       (IntMap)
 import qualified Data.IntMap.Strict       as IntMap
 import qualified Data.List                as List
-import           Data.Primitive.ByteArray (ByteArray)
-import           Data.Text.Utf8           (CodeUnit, CodeUnitIndex)
+import           Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
+import           Data.Text.Utf8           (CodeUnit,
+                                           CodeUnitIndex (CodeUnitIndex),
+                                           indexTextArray)
 import qualified Data.Vector              as Vector
 import qualified Data.Vector.Unboxed      as UVector
 import           Data.Word                (Word64)
@@ -61,6 +63,20 @@ data AcMachine v = AcMachine
 -- | The wildcard value is 2^16, one more than the maximal 16-bit code unit.
 wildcard :: Integral a => a
 wildcard = 0x10000
+
+-- | Extract the code unit from a transition. The special wildcard transition
+-- will return 0.
+transitionCodeUnit :: Transition -> CodeUnit
+transitionCodeUnit t = fromIntegral (t .&. 0xffff)
+
+-- | Extract the goto state from a transition.
+transitionState :: Transition -> State
+transitionState t = fromIntegral (t `shiftR` 32)
+
+-- | Test if the transition is not for a specific code unit, but the wildcard
+-- transition to take if nothing else matches.
+transitionIsWildcard :: Transition -> Bool
+transitionIsWildcard t = (t .&. wildcard) == wildcard
 
 newTransition :: CodeUnit -> State -> Transition
 newTransition input state =
@@ -322,8 +338,103 @@ runWithCase
   -> AcMachine v
   -> HayStack
   -> a
-runWithCase () seed f machine text =
-    undefined
+runWithCase () seed f machine !u8data =
+  let
+    !values = machineValues machine
+    !transitions = machineTransitions machine
+    !offsets = machineOffsets machine
+    !rootAsciiTransitions = machineRootAsciiTransitions machine
+    !stateInitial = 0
+    !initialRemaining = sizeofByteArray u8data
+    !initialOffset = 0
+
+    -- NOTE: All of the arguments are strict here, because we want to compile
+    -- them down to unpacked variables on the stack, or even registers.
+    -- The INLINE / NOINLINE annotations here were added to fix a regression we
+    -- observed when going from GHC 8.2 to GHC 8.6, and this particular
+    -- combination of INLINE and NOINLINE is the fastest one. Removing increases
+    -- the benchmark running time by about 9%.
+
+    {-# NOINLINE consumeInput #-}
+    consumeInput :: Int -> Int -> a -> State -> a
+    consumeInput !offset !remaining !acc !state =
+      let
+        inputCodeUnit = fromIntegral $ indexTextArray u8data offset
+        -- NOTE: Although doing this match here entangles the automaton a bit
+        -- with case sensitivity, doing so is faster than passing in a function
+        -- that transforms each code unit.
+        -- casedCodeUnit = case caseSensitivity of
+        --  IgnoreCase    -> lowerCodeUnit inputCodeUnit
+        --  CaseSensitive -> inputCodeUnit
+      in
+        case remaining of
+          0 -> acc
+          _ -> followEdge (offset + 1) (remaining - 1) acc state inputCodeUnit
+
+    {-# INLINE followEdge #-}
+    followEdge :: Int -> Int -> a -> State -> CodeUnit -> a
+    followEdge !offset !remaining !acc !state !input =
+      let
+        !tssOffset = offsets `uAt` state
+      in
+        -- When we follow an edge, we look in the transition table and do a
+        -- linear scan over all transitions until we find the right one, or
+        -- until we hit the wildcard transition at the end. For 0 or 1 or 2
+        -- transitions that is fine, but the initial state often has more
+        -- transitions, so we have a dedicated lookup table for it, that takes
+        -- up a bit more space, but provides O(1) lookup of the next state. We
+        -- only do this for the first 128 code units (all of ascii).
+        if state == stateInitial && input < asciiCount
+          then lookupRootAsciiTransition offset remaining acc input
+          else lookupTransition offset remaining acc state input tssOffset
+
+    {-# NOINLINE collectMatches #-}
+    collectMatches :: Int -> Int -> a -> State -> a
+    collectMatches !offset !remaining !acc !state =
+      let
+        matchedValues = values `at` state
+        -- Fold over the matched values. If at any point the user-supplied fold
+        -- function returns `Done`, then we early out. Otherwise continue.
+        handleMatch !acc' vs = case vs of
+          []     -> consumeInput offset remaining acc' state
+          v:more -> case f acc' (Match (CodeUnitIndex $ offset - initialOffset) v) of
+            Step newAcc   -> handleMatch newAcc more
+            Done finalAcc -> finalAcc
+      in
+        handleMatch acc matchedValues
+
+    -- NOTE: there is no `state` argument here, because this case applies only
+    -- to the root state `stateInitial`.
+    {-# INLINE lookupRootAsciiTransition #-}
+    lookupRootAsciiTransition :: Int -> Int -> a -> CodeUnit -> a
+    lookupRootAsciiTransition !offset !remaining !acc !input =
+      case rootAsciiTransitions `uAt` fromIntegral input of
+        t | transitionIsWildcard t -> consumeInput offset remaining acc stateInitial
+          | otherwise -> collectMatches offset remaining acc (transitionState t)
+
+    {-# INLINE lookupTransition #-}
+    lookupTransition :: Int -> Int -> a -> State -> CodeUnit -> Int -> a
+    lookupTransition !offset !remaining !acc !state !input !i =
+      case transitions `uAt` i of
+        -- There is no transition for the given input. Follow the fallback edge,
+        -- and try again from that state, etc. If we are in the base state
+        -- already, then nothing matched, so move on to the next input.
+        t | transitionIsWildcard t ->
+              if state == stateInitial
+                then consumeInput offset remaining acc state
+                else followEdge offset remaining acc (transitionState t) input
+
+        -- We found the transition, switch to that new state, collecting matches.
+        -- NOTE: This comes after wildcard checking, because the code unit of
+        -- the wildcard transition is 0, which is a valid input.
+        t | transitionCodeUnit t == input ->
+              collectMatches offset remaining acc (transitionState t)
+
+        -- The transition we inspected is not for the current input, and it is not
+        -- a wildcard either; look at the next transition then.
+        _ -> lookupTransition offset remaining acc state input (i + 1)
+  in
+    consumeInput initialOffset initialRemaining seed stateInitial
 
 {-# INLINE runText #-}
 runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> HayStack -> a
