@@ -34,6 +34,6 @@ executables:
     ghc-options:
     - -rtsopts
     - -threaded
-    - '"-with-rtsopts=-I0 -T -N -A32m -n4m -qg"'  # Matches sharkmachine-compute options
+    - '"-with-rtsopts=-I0 -T -N -A32m -n4m -qg"'
     main: Main.hs
     source-dirs: app/
