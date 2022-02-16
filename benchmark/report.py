@@ -11,7 +11,9 @@ import sys
 import numpy as np
 
 def report_file(file_name: str) -> np.array:
-    data_ns = np.genfromtxt(file_name, dtype=int)
+    # When running the benchmark on a single file, using ndmin ensures that we actually
+    # get a 2-dimensional array.
+    data_ns = np.loadtxt(file_name, ndmin=2, dtype=int)
     num_files, num_iterations = data_ns.shape
 
     data_secs = data_ns / 1e9
