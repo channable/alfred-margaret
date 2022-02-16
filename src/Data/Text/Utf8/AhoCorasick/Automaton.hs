@@ -11,6 +11,7 @@
 module Data.Text.Utf8.AhoCorasick.Automaton where
 
 import           Data.Bits                (Bits (shiftL, (.|.)))
+import           Data.Char                (chr)
 import           Data.Foldable            (foldl')
 import           Data.IntMap.Strict       (IntMap)
 import qualified Data.IntMap.Strict       as IntMap
@@ -109,6 +110,51 @@ build needlesWithValues =
     values = Vector.generate numStates (valueMap IntMap.!)
   in
     AcMachine values transitions offsets rootTransitions
+-- | Build the automaton, and format it as Graphviz Dot, for visual debugging.
+
+debugBuildDot :: [[CodeUnit]] -> String
+debugBuildDot needles =
+  let
+    (_numStates, transitionMap, initialValueMap) =
+      buildTransitionMap $ zip needles ([0..] :: [Int])
+    fallbackMap = buildFallbackMap transitionMap
+    valueMap = buildValueMap transitionMap fallbackMap initialValueMap
+
+    dotEdge extra state nextState =
+      "  " ++ (show state) ++ " -> " ++ (show nextState) ++ " [" ++ extra ++ "];"
+
+    dotFallbackEdge :: [String] -> State -> State -> [String]
+    dotFallbackEdge edges state nextState =
+      (dotEdge "style = dashed" state nextState) : edges
+
+    dotTransitionEdge :: State -> [String] -> Int -> State -> [String]
+    dotTransitionEdge state edges input nextState =
+      (dotEdge ("label = \"" ++ showInput input ++ "\"") state nextState) : edges
+
+    showInput input
+      | input < 0x80 = [chr input]
+      | otherwise     = "0x" ++ asHexByte input
+
+    asHexByte input =
+      [hexChars List.!! div input 16, hexChars List.!! mod input 16]
+      where hexChars = ['0'..'9'] ++ ['a'..'f']
+
+    prependTransitionEdges edges state =
+      IntMap.foldlWithKey' (dotTransitionEdge state) edges (transitionMap IntMap.! state)
+
+    dotMatchState :: [String] -> State -> [Int] -> [String]
+    dotMatchState edges _ [] = edges
+    dotMatchState edges state _ = ("  " ++ show state ++ " [shape = doublecircle];") : edges
+
+    dot0 = foldBreadthFirst prependTransitionEdges [] transitionMap
+    dot1 = IntMap.foldlWithKey' dotFallbackEdge dot0 fallbackMap
+    dot2 = IntMap.foldlWithKey' dotMatchState dot1 valueMap
+  in
+    -- Set rankdir = "LR" to prefer a left-to-right graph, rather than top to
+    -- bottom. I have dual widescreen monitors and I don't use them in portrait
+    -- mode. Reverse the instructions because order affects node lay-out, and by
+    -- prepending we built up a reversed list.
+    unlines $ ["digraph {", "  rankdir = \"LR\";"] ++ reverse dot2 ++ ["}"]
 
 -- Different int maps that are used during constuction of the automaton. The
 -- transition map represents the trie of states, the fallback map contains the
