@@ -1,4 +1,11 @@
-{ pkgs ? import <nixpkgs> {} }:
+let
+    pinnedPkgs = import (builtins.fetchTarball {
+        name = "ac-bench-nixpkgs";
+        url = "https://github.com/NixOS/nixpkgs/archive/1882c6b7368fd284ad01b0a5b5601ef136321292.tar.gz";
+        sha256 = "0zg7ak2mcmwzi2kg29g4v9fvbvs0viykjsg2pwaphm1fi13s7s0i";
+    }) {};
+in
+{ pkgs ? pinnedPkgs }:
 pkgs.mkShell {
     buildInputs = [
         # For benchmark code
