@@ -137,15 +137,15 @@ debugBuildDot needles =
     valueMap = buildValueMap transitionMap fallbackMap initialValueMap
 
     dotEdge extra state nextState =
-      "  " ++ (show state) ++ " -> " ++ (show nextState) ++ " [" ++ extra ++ "];"
+      "  " ++ show state ++ " -> " ++ show nextState ++ " [" ++ extra ++ "];"
 
     dotFallbackEdge :: [String] -> State -> State -> [String]
     dotFallbackEdge edges state nextState =
-      (dotEdge "style = dashed" state nextState) : edges
+      dotEdge "style = dashed" state nextState : edges
 
     dotTransitionEdge :: State -> [String] -> Int -> State -> [String]
     dotTransitionEdge state edges input nextState =
-      (dotEdge ("label = \"" ++ showInput input ++ "\"") state nextState) : edges
+      dotEdge ("label = \"" ++ showInput input ++ "\"") state nextState : edges
 
     showInput input
       | input < 0x80 = [chr input]
