@@ -1,11 +1,18 @@
 module Main where
 
-import System.Environment (getArgs)
+import           Control.Monad                        (forM)
 import qualified Data.Text.Utf8                       as Utf8
-import           Data.Text.Utf8.AhoCorasick.Automaton
+import           Data.Text.Utf8.AhoCorasick.Automaton (debugBuildDot)
+import           System.Environment                   (getArgs)
+import           System.IO                            (hPrint, hPutStr, stderr)
 
 main = do
     args <- getArgs
-    let needles = map (Utf8.unpackUtf8 . Utf8.stringToByteArray) args
+    needles <- forM args $ \needle -> do
+        hPutStr stderr $ needle ++ ": "
+        let needleBytes = Utf8.unpackUtf8 $ Utf8.stringToByteArray needle
+        hPrint stderr needleBytes
+        pure needleBytes
+
     let dot = debugBuildDot needles
     putStrLn dot
