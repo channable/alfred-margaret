@@ -1,0 +1,8 @@
+resolver: lts-16.18
+packages:
+- .
+- ../..
+
+nix:
+  packages:
+    - gmp
