@@ -4,22 +4,28 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | UTF-8 version of 'Data.Text.AhoCorasick.Automaton'
 module Data.Text.Utf8.AhoCorasick.Automaton where
 
+import           Data.Bits                (Bits (shiftL, (.|.)))
+import           Data.Foldable            (foldl')
+import           Data.IntMap.Strict       (IntMap)
+import qualified Data.IntMap.Strict       as IntMap
+import qualified Data.List                as List
 import           Data.Primitive.ByteArray (ByteArray)
-import           Data.Text.Utf8           (CodeUnit, CodeUnitIndex, unpackUtf8)
+import           Data.Text.Utf8           (CodeUnit, CodeUnitIndex)
 import qualified Data.Vector              as Vector
 import qualified Data.Vector.Unboxed      as UVector
 import           Data.Word                (Word64)
 
--- TODO: Transition to text-2.0
+-- FIXME: Transition to text-2.0
 type HayStack = ByteArray
 
--- TODO: Since 2^16 states are (probably?) enough, we could turn this into a Word32 instead,
--- where the msb are the state number and the lsb are the input code unit.
+-- TYPES
+type State = Int
 type Transition = Word64
 
 data Match v = Match
@@ -49,8 +55,215 @@ data AcMachine v = AcMachine
   -- additional memory.
   }
 
+-- AUTOMATON CONSTRUCTION
+
+-- | The wildcard value is 2^16, one more than the maximal 16-bit code unit.
+wildcard :: Integral a => a
+wildcard = 0x10000
+
+newTransition :: CodeUnit -> State -> Transition
+newTransition input state =
+  let
+    input64 = fromIntegral input :: Word64
+    state64 = fromIntegral state :: Word64
+  in
+    (state64 `shiftL` 32) .|. input64
+
+newWildcardTransition :: State -> Transition
+newWildcardTransition state =
+  let
+    state64 = fromIntegral state :: Word64
+  in
+    (state64 `shiftL` 32) .|. wildcard
+
+-- | Pack transitions for each state into one contiguous array. In order to find
+-- the transitions for a specific state, we also produce a vector of start
+-- indices. All transition lists are terminated by a wildcard transition, so
+-- there is no need to record the length.
+packTransitions :: [[Transition]] -> (UVector.Vector Transition, UVector.Vector Int)
+packTransitions transitions =
+  let
+    packed = UVector.fromList $ concat transitions
+    offsets = UVector.fromList $ scanl (+) 0 $ fmap List.length transitions
+  in
+    (packed, offsets)
+
 build :: [([CodeUnit], v)] -> AcMachine v
-build = error "not implemented"
+build needlesWithValues =
+  let
+    (numStates, transitionMap, initialValueMap) = buildTransitionMap needlesWithValues
+    fallbackMap = buildFallbackMap transitionMap
+    valueMap = buildValueMap transitionMap fallbackMap initialValueMap
+
+    -- Convert the map of transitions, and the map of fallback states, into a
+    -- list of transition lists, where every transition list is terminated by
+    -- a wildcard transition to the fallback state.
+    prependTransition ts input state = newTransition (fromIntegral input) state : ts
+    makeTransitions fallback ts = IntMap.foldlWithKey' prependTransition [newWildcardTransition fallback] ts
+    transitionsList = zipWith makeTransitions (IntMap.elems fallbackMap) (IntMap.elems transitionMap)
+
+    -- Pack the transition lists into one contiguous array, and build the lookup
+    -- table for the transitions from the root state.
+    (transitions, offsets) = packTransitions transitionsList
+    rootTransitions = buildAsciiTransitionLookupTable $ transitionMap IntMap.! 0
+    values = Vector.generate numStates (valueMap IntMap.!)
+  in
+    AcMachine values transitions offsets rootTransitions
+
+-- Different int maps that are used during constuction of the automaton. The
+-- transition map represents the trie of states, the fallback map contains the
+-- fallback (or "failure" or "suffix") edge for every state.
+type TransitionMap = IntMap (IntMap State)
+type FallbackMap = IntMap State
+type ValuesMap v = IntMap [v]
+
+-- | Build the trie of the Aho-Corasick state machine for all input needles.
+buildTransitionMap :: forall v. [([CodeUnit], v)] -> (Int, TransitionMap, ValuesMap v)
+buildTransitionMap =
+  let
+    -- | Inserts a single needle into the given transition and values map.
+    -- Int is used to keep track of the current number of states.
+    go :: State
+      -> (Int, TransitionMap, ValuesMap v)
+      -> ([CodeUnit], v)
+      -> (Int, TransitionMap, ValuesMap v)
+
+    -- End of the current needle, insert the associated payload value.
+    -- If a needle occurs multiple times, then at this point we will merge
+    -- their payload values, so the needle is reported twice, possibly with
+    -- different payload values.
+    go !state (!numStates, transitions, values) ([], v) =
+      (numStates, transitions, IntMap.insertWith (++) state [v] values)
+
+    -- Follow the edge for the given input from the current state, creating it
+    -- if it does not exist.
+    go !state (!numStates, transitions, values) (!input : needleTail, vs) =
+      let
+        transitionsFromState = transitions IntMap.! state
+      in
+        case IntMap.lookup (fromIntegral input) transitionsFromState of
+          Just nextState ->
+            go nextState (numStates, transitions, values) (needleTail, vs)
+          Nothing ->
+            let
+              -- Allocate a new state, and insert a transition to it.
+              -- Also insert an empty transition map for it.
+              nextState = numStates
+              transitionsFromState' = IntMap.insert (fromIntegral input) nextState transitionsFromState
+              transitions'
+                = IntMap.insert state transitionsFromState'
+                $ IntMap.insert nextState IntMap.empty
+                $ transitions
+            in
+              go nextState (numStates + 1, transitions', values) (needleTail, vs)
+
+    -- Initially, the root state (state 0) exists, and it has no transitions
+    -- to anywhere.
+    stateInitial = 0
+    initialTransitions = IntMap.singleton stateInitial IntMap.empty
+    initialValues = IntMap.empty
+    insertNeedle = go stateInitial
+  in
+    foldl' insertNeedle (1, initialTransitions, initialValues)
+
+-- Size of the ascii transition lookup table.
+asciiCount :: Integral a => a
+asciiCount = 128
+
+-- | Build a lookup table for the first 128 code units, that can be used for
+-- O(1) lookup of a transition, rather than doing a linear scan over all
+-- transitions. The fallback goes back to the initial state, state 0.
+buildAsciiTransitionLookupTable :: IntMap State -> UVector.Vector Transition
+buildAsciiTransitionLookupTable transitions = UVector.generate asciiCount $ \i ->
+  case IntMap.lookup i transitions of
+    Just state -> newTransition (fromIntegral i) state
+    Nothing    -> newWildcardTransition 0
+
+-- | Traverse the state trie in breadth-first order.
+foldBreadthFirst :: (a -> State -> a) -> a -> TransitionMap -> a
+foldBreadthFirst f seed transitions = go [0] [] seed
+  where
+    -- For the traversal, we keep a queue of states to vitit. Every iteration we
+    -- take one off the front, and all states reachable from there get added to
+    -- the back. Rather than using a list for this, we use the functional
+    -- amortized queue to avoid O(n²) append. This makes a measurable difference
+    -- when the backlog can grow large. In one of our benchmark inputs for
+    -- example, we have roughly 160 needles that are 10 characters each (but
+    -- with some shared prefixes), and the backlog size grows to 148 during
+    -- construction. Construction time goes down from ~0.80 ms to ~0.35 ms by
+    -- using the amortized queue.
+    -- See also section 3.1.1 of Purely Functional Data Structures by Okasaki
+    -- https://www.cs.cmu.edu/~rwh/theses/okasaki.pdf.
+    go [] [] !acc = acc
+    go [] revBacklog !acc = go (reverse revBacklog) [] acc
+    go (state : backlog) revBacklog !acc =
+      let
+        -- Note that the backlog never contains duplicates, because we traverse
+        -- a trie that only branches out. For every state, there is only one
+        -- path from the root that leads to it.
+        extra = IntMap.elems $ transitions IntMap.! state
+      in
+        go backlog (extra ++ revBacklog) (f acc state)
+
+-- | Determine the fallback transition for every state, by traversing the
+-- transition trie breadth-first.
+buildFallbackMap :: TransitionMap -> FallbackMap
+buildFallbackMap transitions =
+  let
+    -- Suppose that in state `state`, there is a transition for input `input`
+    -- to state `nextState`, and we already know the fallback for `state`. Then
+    -- this function returns the fallback state for `nextState`.
+    getFallback :: FallbackMap -> State -> Int -> State
+    -- All the states after the root state (state 0) fall back to the root state.
+    getFallback _ 0 _ = 0
+    getFallback fallbacks !state !input =
+      let
+        fallback = fallbacks IntMap.! state
+        transitionsFromFallback = transitions IntMap.! fallback
+      in
+        case IntMap.lookup input transitionsFromFallback of
+          Just st -> st
+          Nothing -> getFallback fallbacks fallback input
+
+    insertFallback :: State -> FallbackMap -> Int -> State -> FallbackMap
+    insertFallback !state fallbacks !input !nextState =
+      IntMap.insert nextState (getFallback fallbacks state input) fallbacks
+
+    insertFallbacks :: FallbackMap -> State -> FallbackMap
+    insertFallbacks fallbacks !state =
+      IntMap.foldlWithKey' (insertFallback state) fallbacks (transitions IntMap.! state)
+  in
+    foldBreadthFirst insertFallbacks (IntMap.singleton 0 0) transitions
+
+-- | Determine which matches to report at every state, by traversing the
+-- transition trie breadth-first, and appending all the matches from a fallback
+-- state to the matches for the current state.
+buildValueMap :: forall v. TransitionMap -> FallbackMap -> ValuesMap v -> ValuesMap v
+buildValueMap transitions fallbacks valuesInitial =
+  let
+    insertValues :: ValuesMap v -> State -> ValuesMap v
+    insertValues values !state =
+      let
+        fallbackValues = values IntMap.! (fallbacks IntMap.! state)
+        valuesForState = case IntMap.lookup state valuesInitial of
+          Just vs -> vs ++ fallbackValues
+          Nothing -> fallbackValues
+      in
+        IntMap.insert state valuesForState values
+  in
+    foldBreadthFirst insertValues (IntMap.singleton 0 []) transitions
+
+-- Define aliases for array indexing so we can turn bounds checks on and off
+-- in one place. We ran this code with `Vector.!` (bounds-checked indexing) in
+-- production for two months without failing the bounds check, so we have turned
+-- the check off for performance now.
+at :: forall a. Vector.Vector a -> Int -> a
+at = Vector.unsafeIndex
+
+uAt :: forall a. UVector.Unbox a => UVector.Vector a -> Int -> a
+uAt = UVector.unsafeIndex
+
+-- USAGE
 
 data Next a = Done !a | Step !a
 

@@ -4,19 +4,21 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Data.Text.Utf8.AhoCorasickSpec where
 
-import Data.Char (ord)
-import Data.Bits ((.|.), (.&.), shiftR)
-import           Data.String (IsString, fromString)
-import           Data.Primitive                                 (ByteArray, byteArrayFromList)
-import           qualified Data.Text.Utf8                       as Utf8
-import           qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
-import           Test.Hspec                                     (Spec, Expectation, describe, it, shouldBe)
-import Data.Word (Word8)
+import           Data.Bits                            (shiftR, (.&.), (.|.))
+import           Data.Char                            (ord)
+import           Data.Primitive                       (ByteArray,
+                                                       byteArrayFromList)
+import           Data.String                          (IsString, fromString)
+import qualified Data.Text.Utf8                       as Utf8
+import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
+import           Data.Word                            (Word8)
+import           Test.Hspec                           (Expectation, Spec,
+                                                       describe, it, shouldBe)
 
 spec :: Spec
 spec = do
@@ -39,7 +41,7 @@ spec = do
 type HayStack = ByteArray
 
 instance IsString ByteArray where
-    fromString = byteArrayFromList . concat . map char2utf8
+    fromString = byteArrayFromList . concatMap char2utf8
         -- See https://en.wikipedia.org/wiki/UTF-8
         where
             char2utf8 :: Char -> [Word8]
