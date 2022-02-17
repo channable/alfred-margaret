@@ -15,13 +15,16 @@ blocks:
     task:
       prologue:
         commands:
+          # Checkout out the repository
+          - checkout
+          - git status
+          # Restore .stack-work and ~/.stack from cache for faster builds
+          - cache restore home-stack-$SEMAPHORE_GIT_BRANCH
+          - cache restore stack-work-$SEMAPHORE_GIT_BRANCH
           # Install stack, upgrade it to latest version and add it to PATH
           - sudo apt-get install haskell-stack
           - stack upgrade
-          - PATH=~/.local/bin:$PATH
-          # Checkout out the repository using a Semaphore cache
-          - checkout --use-cache
-          - git status
+          - export PATH=~/.local/bin:$PATH
 
       jobs:
         - name: Build alfred-margaret
@@ -30,3 +33,9 @@ blocks:
         - name: Test alfred-margaret
           commands:
             - stack test
+
+      epilogue:
+        commands:
+          # Fill caches
+          - cache store home-stack-$SEMAPHORE_GIT_BRANCH ~/.stack
+          - cache store stack-work-$SEMAPHORE_GIT_BRANCH .stack-work
