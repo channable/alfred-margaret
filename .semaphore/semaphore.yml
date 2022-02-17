@@ -1,0 +1,39 @@
+version: v1.0
+name: "Semaphore pipeline for alfred-margaret"
+
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+
+# Automatically cancel jobs that are already running for all branches but master
+auto_cancel:
+  running:
+    when: "branch != 'master'"
+
+blocks:
+  - name: Stack
+    task:
+      prologue:
+        commands:
+          # Checkout out the repository
+          - checkout
+          - git status
+          # Restore .stack-work and ~/.stack from cache for faster builds
+          - cache restore home-stack-$SEMAPHORE_GIT_BRANCH
+          - cache restore stack-work-$SEMAPHORE_GIT_BRANCH
+          # Install stack, upgrade it to latest version and add it to PATH
+          - sudo apt-get install haskell-stack
+          - stack upgrade --binary-only --binary-version=2.7.3
+          - export PATH=~/.local/bin:$PATH
+
+      jobs:
+        - name: Test alfred-margaret
+          commands:
+            - stack test
+
+      epilogue:
+        commands:
+          # Fill caches
+          - cache store home-stack-$SEMAPHORE_GIT_BRANCH ~/.stack
+          - cache store stack-work-$SEMAPHORE_GIT_BRANCH .stack-work
