@@ -26,12 +26,8 @@ blocks:
           - sudo apt-get install haskell-stack
           - stack upgrade --binary-only --binary-version=2.7.3
           - export PATH=~/.local/bin:$PATH
-          - echo $SEMAPHORE_JOB_NAME
 
       jobs:
-        - name: Build alfred-margaret
-          commands:
-            - stack build
         - name: Test alfred-margaret
           commands:
             - stack test
