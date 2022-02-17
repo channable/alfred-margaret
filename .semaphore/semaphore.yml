@@ -24,8 +24,9 @@ blocks:
           - cache restore stack-work-$SEMAPHORE_GIT_BRANCH
           # Install stack, upgrade it to latest version and add it to PATH
           - sudo apt-get install haskell-stack
-          - stack upgrade
+          - stack upgrade --binary-only --binary-version=2.7.3
           - export PATH=~/.local/bin:$PATH
+          - echo $SEMAPHORE_JOB_NAME
 
       jobs:
         - name: Build alfred-margaret
