@@ -15,8 +15,13 @@ blocks:
     task:
       prologue:
         commands:
+          # Install stack, upgrade it to latest version and add it to PATH
           - sudo apt-get install haskell-stack
           - stack upgrade
+          - PATH=~/.local/bin:$PATH
+          # Checkout out the repository using a Semaphore cache
+          - checkout --use-cache
+          - git status
 
       jobs:
         - name: Build alfred-margaret
