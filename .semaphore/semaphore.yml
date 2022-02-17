@@ -6,6 +6,7 @@ agent:
     type: e1-standard-2
     os_image: ubuntu1804
 
+# Automatically cancel jobs that are already running for all branches but master
 auto_cancel:
   running:
     when: "branch != 'master'"
