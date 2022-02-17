@@ -4,19 +4,17 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
-{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Data.Text.Utf8.AhoCorasickSpec where
 
-import           Data.Primitive                       (ByteArray,
-                                                       byteArrayFromList)
-import           Data.String                          (IsString, fromString)
-import qualified Data.Text.Utf8                       as Utf8
+import Data.Primitive (ByteArray, byteArrayFromList)
+import Data.String (IsString, fromString)
+import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
-import           Data.Word                            (Word8)
-import           Test.Hspec                           (Expectation, Spec,
-                                                       describe, it, shouldBe)
+import Data.Word (Word8)
+import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 
 spec :: Spec
 spec = do

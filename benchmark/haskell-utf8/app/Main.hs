@@ -1,25 +1,25 @@
-{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim #-}
 
 -- | Benchmark for our Aho-Corasick implementation.
 module Main where
 
-import           Control.Exception                    (evaluate)
-import           Data.Foldable                        (for_, traverse_)
-import           System.IO                            (hPrint, stderr, stdout)
-import           Text.Printf                          (hPrintf)
+import Control.Exception (evaluate)
+import Data.Foldable (for_, traverse_)
+import System.IO (hPrint, stderr, stdout)
+import Text.Printf (hPrintf)
 
-import qualified Data.ByteString                      as BS
-import qualified Data.List                            as List
-import qualified Data.Text                            as Text
-import qualified Data.Text.Encoding                   as Encoding
-import qualified System.Clock                         as Clock
-import qualified System.Environment                   as Env
+import qualified Data.ByteString as BS
+import qualified Data.List as List
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
+import qualified System.Clock as Clock
+import qualified System.Environment as Env
 
-import           Control.Monad                        (when)
-import           Data.Primitive.ByteArray             (ByteArray)
-import qualified Data.Text.Utf8                       as Utf8
+import Control.Monad (when)
+import Data.Primitive.ByteArray (ByteArray)
+import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 
 main :: IO ()

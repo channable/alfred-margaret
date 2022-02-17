@@ -1,8 +1,8 @@
 module Data.Text.Utf8.Utf8Spec where
 
-import           Control.Monad (forM_)
-import qualified Data.Char     as Char
-import           Test.Hspec    (Spec, describe, it, shouldSatisfy)
+import Control.Monad (forM_)
+import qualified Data.Char as Char
+import Test.Hspec (Spec, describe, it, shouldSatisfy)
 
 spec :: Spec
 spec = do

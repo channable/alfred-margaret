@@ -1,11 +1,11 @@
 module Main where
 
-import           Test.Hspec                     (describe, hspec)
+import Test.Hspec (describe, hspec)
 
-import           Data.Text.AhoCorasickSpec      as A
-import           Data.Text.BoyerMooreSpec       as B
-import           Data.Text.Utf8.AhoCorasickSpec as U8A
-import           Data.Text.Utf8.Utf8Spec        as U8
+import Data.Text.AhoCorasickSpec as A
+import Data.Text.BoyerMooreSpec as B
+import Data.Text.Utf8.AhoCorasickSpec as U8A
+import Data.Text.Utf8.Utf8Spec as U8
 
 main :: IO ()
 main = hspec $ do

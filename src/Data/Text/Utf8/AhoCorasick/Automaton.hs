@@ -4,25 +4,23 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
-{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | UTF-8 version of 'Data.Text.AhoCorasick.Automaton'
 module Data.Text.Utf8.AhoCorasick.Automaton where
 
-import           Data.Bits                (Bits (shiftL, shiftR, (.&.), (.|.)))
-import           Data.Char                (chr)
-import           Data.Foldable            (foldl')
-import           Data.IntMap.Strict       (IntMap)
-import qualified Data.IntMap.Strict       as IntMap
-import qualified Data.List                as List
-import           Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
-import           Data.Text.Utf8           (CodeUnit,
-                                           CodeUnitIndex (CodeUnitIndex),
-                                           indexTextArray)
-import qualified Data.Vector              as Vector
-import qualified Data.Vector.Unboxed      as UVector
-import           Data.Word                (Word64)
+import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
+import Data.Char (chr)
+import Data.Foldable (foldl')
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
+import qualified Data.List as List
+import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
+import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), indexTextArray)
+import qualified Data.Vector as Vector
+import qualified Data.Vector.Unboxed as UVector
+import Data.Word (Word64)
 
 -- FIXME: Transition to text-2.0
 type HayStack = ByteArray

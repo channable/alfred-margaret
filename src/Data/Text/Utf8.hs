@@ -7,11 +7,10 @@
 module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), unpackUtf8, stringToByteArray, indexTextArray, unicode2utf8) where
 
 
-import           Data.Bits                (Bits, shiftR, (.&.), (.|.))
-import           Data.Char                (ord)
-import           Data.Primitive.ByteArray (ByteArray, byteArrayFromList,
-                                           indexByteArray, sizeofByteArray)
-import           Data.Word                (Word8)
+import Data.Bits (Bits, shiftR, (.&.), (.|.))
+import Data.Char (ord)
+import Data.Primitive.ByteArray (ByteArray, byteArrayFromList, indexByteArray, sizeofByteArray)
+import Data.Word (Word8)
 
 type CodeUnit = Word8
 
