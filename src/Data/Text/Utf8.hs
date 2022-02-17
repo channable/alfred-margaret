@@ -4,10 +4,10 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
-module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), unpackUtf8, stringToByteArray, indexTextArray) where
+module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), unpackUtf8, stringToByteArray, indexTextArray, unicode2utf8) where
 
 
-import           Data.Bits                (shiftR, (.&.), (.|.))
+import           Data.Bits                (Bits, shiftR, (.&.), (.|.))
 import           Data.Char                (ord)
 import           Data.Primitive.ByteArray (ByteArray, byteArrayFromList,
                                            indexByteArray, sizeofByteArray)
@@ -39,8 +39,10 @@ stringToByteArray = byteArrayFromList . concatMap char2utf8
             char2utf8 :: Char -> [Word8]
             char2utf8 = map fromIntegral . unicode2utf8 . ord
 
-            unicode2utf8 c
-                | c < 0x80    = [c]
-                | c < 0x800   = [0xc0 .|. (c `shiftR` 6), 0x80 .|. (0x3f .&. c)]
-                | c < 0x10000 = [0xe0 .|. (c `shiftR` 12), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
-                | otherwise   = [0xf0 .|. (c `shiftR` 18), 0x80 .|. (0x3f .&. (c `shiftR` 12)), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
+-- | Convert a Unicode Code Point 'c' into a list of UTF-8 code units (bytes).
+unicode2utf8 :: (Ord a, Num a, Bits a) => a -> [a]
+unicode2utf8 c
+    | c < 0x80    = [c]
+    | c < 0x800   = [0xc0 .|. (c `shiftR` 6), 0x80 .|. (0x3f .&. c)]
+    | c < 0x10000 = [0xe0 .|. (c `shiftR` 12), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
+    | otherwise   = [0xf0 .|. (c `shiftR` 18), 0x80 .|. (0x3f .&. (c `shiftR` 12)), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
