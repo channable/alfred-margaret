@@ -12,5 +12,7 @@ java/bazel-testlogs
 
 haskell/ac-bench.cabal
 haskell/.stack-work
+haskell-utf8/ac-bench-utf8.cabal
+haskell-utf8/.stack-work
 
 rust/target/

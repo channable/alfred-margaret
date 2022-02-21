@@ -76,16 +76,36 @@ Run the benchmark using the compiled binary:
 ./benchmark.py haskell/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix haskell
 ```
 
+### Haskell, UTF-8 Version
+
+In `text-2.0` and above, the `Text` type with use UTF-8 under the hood.
+The `haskell-utf8` directory contains a preliminary benchmark for `alfred-margaret` using UTF-8 byte arrays.
+To compile it, run Stack in the `haskell-utf8` directory:
+
+```
+stack build
+```
+
+Run the benchmark using the compiled binary:
+
+```
+./benchmark.py haskell-utf8/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix haskell-utf8
+```
+
 ## Inspecting the Results
 
 Once you have a bunch of `.stats` files, you can inspect the results using `report.py`:
 
 ```
-./report.py haskell.stats rust.stats java.stats python.stats
+./report.py haskell.stats haskell-utf8.stats rust.stats java.stats python.stats
 # Will print something like (depending on your machine...)
 haskell.stats:
-  mean time: 3.718 ± 0.020 seconds
-   min time: 3.586 seconds
+  mean time: 3.529 ± 0.010 seconds
+   min time: 3.431 seconds
+
+haskell-utf8.stats:
+  mean time: 3.526 ± 0.028 seconds
+   min time: 3.392 seconds
 
 rust.stats:
   mean time: 4.771 ± 0.013 seconds
