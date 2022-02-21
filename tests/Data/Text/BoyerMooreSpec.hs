@@ -8,15 +8,15 @@ module Data.Text.BoyerMooreSpec (spec) where
 import Control.DeepSeq (rnf)
 import Control.Monad (forM_)
 import Data.Foldable (for_)
-import Test.Hspec (Spec, Expectation, describe, it, parallel, shouldBe)
+import Data.Text (Text)
+import GHC.Stack (HasCallStack)
+import Prelude hiding (replicate)
+import Test.Hspec (Expectation, Spec, describe, it, parallel, shouldBe)
 import Test.Hspec.Expectations (shouldMatchList, shouldSatisfy)
 import Test.Hspec.QuickCheck (modifyMaxSuccess, prop)
 import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink, (==>))
-import Test.QuickCheck.Instances ()
 import Test.QuickCheck.Gen (Gen)
-import GHC.Stack (HasCallStack)
-import Data.Text (Text)
-import Prelude hiding (replicate)
+import Test.QuickCheck.Instances ()
 
 import qualified Data.Text as Text
 import qualified Data.Text.Internal.Search as TextSearch
@@ -24,8 +24,8 @@ import qualified Data.Text.Unsafe as TextUnsafe
 import qualified Test.QuickCheck as QuickCheck
 import qualified Test.QuickCheck.Gen as Gen
 
-import Data.Text.Orphans ()
 import Data.Text.BoyerMoore.Automaton (CaseSensitivity (..))
+import Data.Text.Orphans ()
 
 import qualified Data.Text.AhoCorasick.Replacer as AhoReplacer
 import qualified Data.Text.BoyerMoore.Automaton as BoyerMoore

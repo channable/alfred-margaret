@@ -6,9 +6,9 @@
 
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | An efficient implementation of the Aho-Corasick string matching algorithm.
@@ -44,7 +44,7 @@ module Data.Text.AhoCorasick.Automaton
 import Prelude hiding (length)
 
 import Control.DeepSeq (NFData)
-import Data.Bits ((.&.), (.|.), shiftL, shiftR)
+import Data.Bits (shiftL, shiftR, (.&.), (.|.))
 import Data.Foldable (foldl')
 import Data.Hashable (Hashable)
 import Data.IntMap.Strict (IntMap)

@@ -6,8 +6,8 @@
 
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -53,7 +53,7 @@ import qualified Data.Vector.Unboxed as UVector
 import qualified Data.Vector.Unboxed.Mutable as UMVector
 
 import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..), Next (..))
-import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), lengthUtf16, lowerCodeUnit, lengthUtf16, unsafeIndexUtf16)
+import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), lengthUtf16, lowerCodeUnit, unsafeIndexUtf16)
 
 -- | A Boyer-Moore automaton is based on lookup-tables that allow skipping through the haystack.
 -- This allows for sub-linear matching in some cases, as we do not have to look at every input
