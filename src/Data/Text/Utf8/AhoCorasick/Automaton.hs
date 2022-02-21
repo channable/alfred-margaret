@@ -7,7 +7,26 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- | UTF-8 version of 'Data.Text.AhoCorasick.Automaton'
+-- | An efficient implementation of the Aho-Corasick string matching algorithm.
+-- See http://web.stanford.edu/class/archive/cs/cs166/cs166.1166/lectures/02/Small02.pdf
+-- for a good explanation of the algorithm.
+--
+-- The memory layout of the automaton, and the function that steps it, were
+-- optimized to the point where string matching compiles roughly to a loop over
+-- the code units in the input text, that keeps track of the current state.
+-- Lookup of the next state is either just an array index (for the root state),
+-- or a linear scan through a small array (for non-root states). The pointer
+-- chases that are common for traversing Haskell data structures have been
+-- eliminated.
+--
+-- The construction of the automaton has not been optimized that much, because
+-- construction time is usually negligible in comparison to matching time.
+-- Therefore construction is a two-step process, where first we build the
+-- automaton as int maps, which are convenient for incremental construction.
+-- Afterwards we pack the automaton into unboxed vectors.
+--
+-- This module is a rewrite of the previous version which used an older version of
+-- the 'text' package which in turn used UTF-16 internally.
 module Data.Text.Utf8.AhoCorasick.Automaton where
 
 import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
@@ -26,7 +45,30 @@ import Data.Word (Word64)
 type HayStack = ByteArray
 
 -- TYPES
+-- | A numbered state in the Aho-Corasick automaton.
 type State = Int
+
+-- | A transition is a pair of (code unit, next state). The code unit is 16 bits,
+-- and the state index is 32 bits. We pack these together as a manually unlifted
+-- tuple, because an unboxed Vector of tuples is a tuple of vectors, but we want
+-- the elements of the tuple to be adjacent in memory. (The Word64 still needs
+-- to be unpacked in the places where it is used.) The code unit is stored in
+-- the least significant 32 bits, with the special value 2^16 indicating a
+-- wildcard; the "failure" transition. Bit 17 through 31 (starting from zero,
+-- both bounds inclusive) are always 0.
+--
+--  Bit 63 (most significant)                 Bit 0 (least significant)
+--  |                                                                 |
+--  v                                                                 v
+-- |<--       goto state         -->|<-- zeros   -->| |<--   input  -->|
+-- |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|000000000000000|W|IIIIIIIIIIIIIIII|
+--                                                   |
+--                                                   Wildcard bit (bit 16)
+--
+-- If you change this representation, make sure to update 'transitionCodeUnit',
+-- 'wildcard', 'transitionState', 'transitionIsWildcard', 'newTransition' and
+-- 'newWildcardTransition' as well. Those functions form the interface used to
+-- construct and read transitions.
 type Transition = Word64
 
 data Match v = Match
@@ -103,9 +145,17 @@ packTransitions transitions =
   in
     (packed, offsets)
 
+-- | Construct an Aho-Corasick automaton for the given needles.
+-- The automaton uses UTF-8 code units (bytes) to match the input.
+-- This means that running it is a bit tricky if you want to ignore case,
+-- since changing a code point's case may increase or decrease its number of code units.
 build :: [([CodeUnit], v)] -> AcMachine v
 build needlesWithValues =
   let
+    -- Construct the Aho-Corasick automaton using IntMaps, which are a suitable
+    -- representation when building the automaton. We use int maps rather than
+    -- hash maps to ensure that the iteration order is the same as that of a
+    -- vector.
     (numStates, transitionMap, initialValueMap) = buildTransitionMap needlesWithValues
     fallbackMap = buildFallbackMap transitionMap
     valueMap = buildValueMap transitionMap fallbackMap initialValueMap
@@ -197,7 +247,7 @@ buildTransitionMap =
 
     -- Follow the edge for the given input from the current state, creating it
     -- if it does not exist.
-    go !state (!numStates, transitions, values) (!input : needleTail, vs) =
+    go !state (!numStates, transitions, values) (input : needleTail, vs) =
       let
         transitionsFromState = transitions IntMap.! state
       in
@@ -212,8 +262,7 @@ buildTransitionMap =
               transitionsFromState' = IntMap.insert (fromIntegral input) nextState transitionsFromState
               transitions'
                 = IntMap.insert state transitionsFromState'
-                $ IntMap.insert nextState IntMap.empty
-                $ transitions
+                $ IntMap.insert nextState IntMap.empty transitions
             in
               go nextState (numStates + 1, transitions', values) (needleTail, vs)
 
@@ -323,10 +372,14 @@ at = Vector.unsafeIndex
 uAt :: forall a. UVector.Unbox a => UVector.Vector a -> Int -> a
 uAt = UVector.unsafeIndex
 
--- USAGE
+-- RUNNING THE MACHINE
 
+-- | Result of handling a match: stepping the automaton can exit early by
+-- returning a `Done`, or it can continue with a new accumulator with `Step`.
 data Next a = Done !a | Step !a
 
+-- | The unit parameter here is a placeholder for a future CaseSensitivity flag,
+-- see old module.
 {-# INLINE runWithCase #-}
 runWithCase
   :: forall a v
@@ -434,6 +487,9 @@ runWithCase () seed f machine !u8data =
   in
     consumeInput initialOffset initialRemaining seed stateInitial
 
+-- NOTE: To get full advantage of inlining this function, you probably want to
+-- compile the compiling module with -fllvm and the same optimization flags as
+-- this module.
 {-# INLINE runText #-}
 runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> HayStack -> a
 runText = runWithCase ()
