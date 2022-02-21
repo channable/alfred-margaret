@@ -4,13 +4,17 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
+{-# LANGUAGE MagicHash #-}
+
 module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text(..), unpackUtf8, stringToByteArray, indexTextArray, unicode2utf8, pack) where
 
 import Data.Bits (Bits, shiftR, (.&.), (.|.))
-import Data.Char (ord)
-import Data.Primitive.ByteArray (ByteArray, byteArrayFromList, indexByteArray, sizeofByteArray)
+import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, indexByteArray,
+                                 sizeofByteArray)
 import Data.Word (Word8)
 
+import Data.Char (ord)
+import GHC.Base (Int (I#), compareByteArrays#)
 import Prelude hiding (length)
 
 type CodeUnit = Word8
@@ -20,6 +24,14 @@ data Text
   -- First Int marks the starting point of the UTF-8 sequence in the array (in bytes).
   -- Second Int is the length of the UTF-8 sequence (in bytes).
   = Text !ByteArray !Int !Int
+  deriving Show
+
+-- This instance, as well as the Show instance above, is necessary for the test suite.
+instance Eq Text where
+  -- Since Data.Primitive.ByteArray.compareByteArrays is not available in lts-16.28, use the primitive version
+  -- from GHC.Base
+  (Text (ByteArray u8data) (I# offset) (I# length)) == (Text (ByteArray u8data') (I# offset') (I# length')) =
+    I# length == I# length' && I# (compareByteArrays# u8data offset u8data' offset' length) == 0
 
 newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int

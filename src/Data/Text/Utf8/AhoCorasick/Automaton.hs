@@ -44,21 +44,21 @@ import Data.Word (Word64)
 -- | A numbered state in the Aho-Corasick automaton.
 type State = Int
 
--- | A transition is a pair of (code unit, next state). The code unit is 16 bits,
+-- | A transition is a pair of (code unit, next state). The code unit is 8 bits,
 -- and the state index is 32 bits. We pack these together as a manually unlifted
 -- tuple, because an unboxed Vector of tuples is a tuple of vectors, but we want
 -- the elements of the tuple to be adjacent in memory. (The Word64 still needs
 -- to be unpacked in the places where it is used.) The code unit is stored in
--- the least significant 32 bits, with the special value 2^16 indicating a
--- wildcard; the "failure" transition. Bit 17 through 31 (starting from zero,
+-- the least significant 32 bits, with the special value 2^8 indicating a
+-- wildcard; the "failure" transition. Bit 9 through 31 (starting from zero,
 -- both bounds inclusive) are always 0.
 --
 --  Bit 63 (most significant)                 Bit 0 (least significant)
 --  |                                                                 |
 --  v                                                                 v
--- |<--       goto state         -->|<-- zeros   -->| |<--   input  -->|
--- |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|000000000000000|W|IIIIIIIIIIIIIIII|
---                                                   |
+-- |<--       goto state         -->|<--       zeros     -->| |<-input>|
+-- |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|00000000000000000000000|W|IIIIIIII|
+--                                                           |
 --                                                   Wildcard bit (bit 16)
 --
 -- If you change this representation, make sure to update 'transitionCodeUnit',
@@ -96,14 +96,14 @@ data AcMachine v = AcMachine
 
 -- AUTOMATON CONSTRUCTION
 
--- | The wildcard value is 2^16, one more than the maximal 16-bit code unit.
+-- | The wildcard value is 2^8, one more than the maximal 8-bit code unit (255/0xff).
 wildcard :: Integral a => a
-wildcard = 0x10000
+wildcard = 0x100
 
 -- | Extract the code unit from a transition. The special wildcard transition
 -- will return 0.
 transitionCodeUnit :: Transition -> CodeUnit
-transitionCodeUnit t = fromIntegral (t .&. 0xffff)
+transitionCodeUnit t = fromIntegral (t .&. 0xff)
 
 -- | Extract the goto state from a transition.
 transitionState :: Transition -> State

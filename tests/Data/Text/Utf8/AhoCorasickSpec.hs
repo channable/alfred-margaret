@@ -34,16 +34,14 @@ spec = do
 
 -- helpers
 
-type HayStack = ByteArray
+instance IsString Utf8.Text where
+    fromString = Utf8.pack
 
-instance IsString ByteArray where
-    fromString = Utf8.stringToByteArray
-
-utf8Test :: String -> [Word8] -> Expectation
-utf8Test str byteList = fromString str `shouldBe` byteArrayFromList byteList
+utf8Test :: String -> [Utf8.CodeUnit] -> Expectation
+utf8Test str byteList = fromString str `shouldBe` Utf8.Text (byteArrayFromList byteList) 0 (length byteList)
 
 -- From ./benchmark
-countMatches :: [HayStack] -> HayStack -> Int
+countMatches :: [Utf8.Text] -> Utf8.Text -> Int
 {-# NOINLINE countMatches #-}
 countMatches needles haystack = case needles of
   [] -> 0
