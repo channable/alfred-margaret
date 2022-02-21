@@ -14,7 +14,7 @@ module Data.Text.BoyerMoore.Replacer
   where
 
 import Data.Text (Text)
-import Data.Text.BoyerMoore.Automaton (CodeUnitIndex, Automaton)
+import Data.Text.BoyerMoore.Automaton (Automaton, CodeUnitIndex)
 
 import qualified Data.Text as Text
 
