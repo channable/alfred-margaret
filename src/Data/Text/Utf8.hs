@@ -4,32 +4,45 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
-module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), unpackUtf8, stringToByteArray, indexTextArray, unicode2utf8) where
-
+module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text(..), unpackUtf8, stringToByteArray, indexTextArray, unicode2utf8, pack) where
 
 import Data.Bits (Bits, shiftR, (.&.), (.|.))
 import Data.Char (ord)
 import Data.Primitive.ByteArray (ByteArray, byteArrayFromList, indexByteArray, sizeofByteArray)
 import Data.Word (Word8)
 
+import Prelude hiding (length)
+
 type CodeUnit = Word8
+
+data Text
+  -- | A placeholder constructor for UTF-8 encoded text until we can use text-2.0.
+  -- First Int marks the starting point of the UTF-8 sequence in the array (in bytes).
+  -- Second Int is the length of the UTF-8 sequence (in bytes).
+  = Text !ByteArray !Int !Int
 
 newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int
     }
 
 {-# INLINABLE unpackUtf8 #-}
-unpackUtf8 :: ByteArray -> [CodeUnit]
-unpackUtf8 u8data =
+unpackUtf8 :: Text -> [CodeUnit]
+unpackUtf8 (Text u8data offset length) =
   let
     go _ 0 = []
     go i n = indexTextArray u8data i : go (i + 1) (n - 1)
   in
-    go 0 $ sizeofByteArray u8data
+    go offset length
 
 {-# INLINE indexTextArray #-}
 indexTextArray :: ByteArray -> Int -> CodeUnit
 indexTextArray = indexByteArray
+
+-- | Warning: This is slow placeholder function meant to be used for debugging.
+pack :: String -> Text
+pack = go . stringToByteArray
+  where
+    go arr = Text arr 0 $ sizeofByteArray arr
 
 stringToByteArray :: String -> ByteArray
 stringToByteArray = byteArrayFromList . concatMap char2utf8

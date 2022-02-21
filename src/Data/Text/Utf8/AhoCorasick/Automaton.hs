@@ -35,14 +35,10 @@ import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
-import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
-import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), indexTextArray)
+import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as UVector
 import Data.Word (Word64)
-
--- FIXME: Transition to text-2.0
-type HayStack = ByteArray
 
 -- TYPES
 -- | A numbered state in the Aho-Corasick automaton.
@@ -387,17 +383,15 @@ runWithCase
   -> a
   -> (a -> Match v -> Next a)
   -> AcMachine v
-  -> HayStack
+  -> Text
   -> a
-runWithCase () seed f machine !u8data =
+runWithCase () seed f machine (Text !u8data !initialOffset !initialRemaining) =
   let
     !values = machineValues machine
     !transitions = machineTransitions machine
     !offsets = machineOffsets machine
     !rootAsciiTransitions = machineRootAsciiTransitions machine
     !stateInitial = 0
-    !initialRemaining = sizeofByteArray u8data
-    !initialOffset = 0
 
     -- NOTE: All of the arguments are strict here, because we want to compile
     -- them down to unpacked variables on the stack, or even registers.
@@ -491,5 +485,5 @@ runWithCase () seed f machine !u8data =
 -- compile the compiling module with -fllvm and the same optimization flags as
 -- this module.
 {-# INLINE runText #-}
-runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> HayStack -> a
+runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runText = runWithCase ()

@@ -18,7 +18,6 @@ import qualified System.Clock as Clock
 import qualified System.Environment as Env
 
 import Control.Monad (when)
-import Data.Primitive.ByteArray (ByteArray)
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 
@@ -33,9 +32,9 @@ processFile path = do
   -- Turn the haystack into a UTF-8 byte array using String as an intermediate representation
   -- Not the nicest solution but it works well enough until we convert the dataset into UTF-8.
   -- haystackLines also contains the empty line we breaked on, drop it using tail
-  let !haystack = Utf8.stringToByteArray $ Text.unpack $ Text.unlines $ tail haystackLines
+  let !haystack = Utf8.pack $ Text.unpack $ Text.unlines $ tail haystackLines
   -- Turn each needle into a UTF-8 byte array.
-  let !needles = map (Utf8.stringToByteArray . Text.unpack) needles'
+  let !needles = map (Utf8.pack . Text.unpack) needles'
 
   -- ByteArray has no NFData instance :(
   -- void $ evaluate $ force needles
@@ -48,7 +47,7 @@ processFile path = do
     hPrintf stdout "%d\t" (Clock.toNanoSecs duration)
   hPrintf stdout "\n"
 
-acBench :: [ByteArray] -> ByteArray -> IO (Int, Clock.TimeSpec)
+acBench :: [Utf8.Text] -> Utf8.Text -> IO (Int, Clock.TimeSpec)
 {-# NOINLINE acBench #-}
 acBench needles haystack = do
   start <- Clock.getTime Clock.Monotonic
@@ -56,13 +55,13 @@ acBench needles haystack = do
   end <- Clock.getTime Clock.Monotonic
   pure (matchCount, Clock.diffTimeSpec start end)
 
-countMatches :: [ByteArray] -> ByteArray -> Int
+countMatches :: [Utf8.Text] -> Utf8.Text -> Int
 {-# NOINLINE countMatches #-}
 countMatches needles haystack = case needles of
   [] -> 0
   _  ->
     let
-      ac = Aho.build $ zip (fmap Utf8.unpackUtf8 needles) (repeat ())
+      ac = Aho.build $ zip (map Utf8.unpackUtf8 needles) (repeat ())
       onMatch !n _match = Aho.Step (n + 1)
     in
       Aho.runText 0 onMatch ac haystack

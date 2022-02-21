@@ -10,7 +10,7 @@ main = do
     args <- getArgs
     needles <- forM args $ \needle -> do
         hPutStr stderr $ needle ++ ": "
-        let needleBytes = Utf8.unpackUtf8 $ Utf8.stringToByteArray needle
+        let needleBytes = Utf8.unpackUtf8 $ Utf8.pack needle
         hPrint stderr needleBytes
         pure needleBytes
 
