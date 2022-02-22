@@ -31,6 +31,7 @@ module Data.Text.Utf8.AhoCorasick.Automaton where
 
 import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
+import qualified Data.Char as Char
 import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
@@ -502,17 +503,49 @@ runLower !seed !f !machine (Text !u8data !initialOffset !initialRemaining) =
     consumeInput :: Int -> Int -> a -> State -> a
     consumeInput _offset 0 acc _state = acc
     consumeInput !offset !remaining !acc !state
-      -- Code point is a single byte
-      | cu < 0xc0 = followCodeUnit (offset + 1) (remaining - 1) acc cu state
+      -- Code point is a single byte ==> It's ASCII, no need to call toLower; we can just use maths :)
+      -- ┌───────────────┐
+      -- │0 x x x x x x x│
+      -- └───────────────┘
+      | cu < 0xc0 =
+        let
+          !cu' = if cu >= 0x61 && cu <= 0x7a then cu - 0x20 else cu
+        in followCodeUnit (offset + 1) (remaining - 1) acc cu' state
+      -- ┌───────────────┬───────────────┐
+      -- │1 1 0 x x x x x│1 0 x x x x x x│
+      -- └───────────────┴───────────────┘
       -- Code point is two bytes ==> decode and lowercase
-      | cu < 0xe0 = follow2CodeUnits (offset + 2) (remaining - 2) acc cu (indexTextArray u8data 1) state
+      | cu < 0xe0 = followCodePoint (offset + 2) (remaining - 2) acc (decode2 cu $ indexTextArray u8data $ offset + 2) state
+      -- ┌───────────────┬───────────────┬───────────────┐
+      -- │1 1 1 0 x x x x│1 0 x x x x x x│1 0 x x x x x x│
+      -- └───────────────┴───────────────┴───────────────┘
       -- Code point is three bytes ==> decode and lowercase
-      | cu < 0xf0 = follow3CodeUnits (offset + 3) (remaining - 3) acc cu (indexTextArray u8data 1) (indexTextArray u8data 2) state
+      | cu < 0xf0 = followCodePoint (offset + 3) (remaining - 3) acc (decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2)) state
       -- Code point is four bytes ==> outside bmp
-      -- TODO: Now that we are handling multi-code unit code points anyways, we could just lower here too.
-      | otherwise = follow4CodeUnits (offset + 4) (remaining - 4) acc cu (indexTextArray u8data 1) (indexTextArray u8data 2) (indexTextArray u8data 3) state
+      -- TODO: Now that we are handling code points with multiple code units anyways, we could just toLower here too.
+      | otherwise = follow4CodeUnits (offset + 4) (remaining - 4) acc cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2) (indexTextArray u8data $ offset + 3) state
       where
         !cu = indexTextArray u8data offset
+
+    {-# INLINE followCodePoint #-}
+    followCodePoint :: Int -> Int -> a -> Int -> State -> a
+    followCodePoint !offset !remaining !acc !cp !state
+      | lowerCp < 0x80 = followCodeUnit offset remaining acc (fromIntegral lowerCp) state
+      | lowerCp < 0x800 = follow2CodeUnits offset remaining acc (fromIntegral $ lowerCp `shiftR` 6) (fromIntegral $ lowerCp .&. 0x3f) state
+      | lowerCp < 0x10000 = follow3CodeUnits offset remaining acc (fromIntegral $ lowerCp `shiftR` 12) (fromIntegral $ (lowerCp `shiftR` 6) .&. 0x3f) (fromIntegral $ lowerCp .&. 0x3f) state
+      | otherwise = error "please handle code points with 4 code units separately"
+      where
+        !lowerCp = Char.ord $ Char.toLower $ Char.chr cp
+
+    {-# INLINE decode2 #-}
+    decode2 :: CodeUnit -> CodeUnit -> Int
+    decode2 cu0 cu1 =
+      (fromIntegral cu0 .&. 0x1f) `shiftL` 6 .|. fromIntegral cu1 .&. 0x3f
+
+    {-# INLINE decode3 #-}
+    decode3 :: CodeUnit -> CodeUnit -> CodeUnit -> Int
+    decode3 cu0 cu1 cu2 =
+      (fromIntegral cu0 .&. 0xf) `shiftL` 12 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu2 .&. 0x3f)
 
     {-# INLINE followCodeUnit #-}
     followCodeUnit :: Int -> Int -> a -> CodeUnit -> State -> a
