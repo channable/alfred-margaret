@@ -58,6 +58,8 @@ library
     , text             >= 1.2.3 && < 1.3
     , unordered-containers >= 0.2.9 && < 0.3
     , vector           >= 0.12 && < 0.13
+    -- TODO: Remove bytestring once we move to text-2.0
+    , bytestring
   ghc-options:         -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -O2
   default-language:    Haskell2010
   if flag(aeson) {

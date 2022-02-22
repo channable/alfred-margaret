@@ -4,16 +4,20 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
 
-module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text(..), unpackUtf8, stringToByteArray, indexTextArray, unicode2utf8, pack) where
+module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text(..), unpackUtf8, Data.Text.Utf8.readFile, stringToByteArray, indexTextArray, unicode2utf8, pack) where
 
 import Data.Bits (Bits, shiftR, (.&.), (.|.))
 import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, indexByteArray,
-                                 sizeofByteArray)
+                                 newByteArray, sizeofByteArray, unsafeFreezeByteArray,
+                                 writeByteArray)
 import Data.Word (Word8)
 
+import qualified Data.ByteString as BS
 import Data.Char (ord)
+import Data.Foldable (for_)
 import GHC.Base (Int (I#), compareByteArrays#)
 import Prelude hiding (length)
 
@@ -35,7 +39,7 @@ instance Eq Text where
 
 newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int
-    }
+    } deriving Show
 
 {-# INLINABLE unpackUtf8 #-}
 unpackUtf8 :: Text -> [CodeUnit]
@@ -54,7 +58,7 @@ indexTextArray = indexByteArray
 pack :: String -> Text
 pack = go . stringToByteArray
   where
-    go arr = Text arr 0 $ sizeofByteArray arr
+    go !arr = Text arr 0 $ sizeofByteArray arr
 
 stringToByteArray :: String -> ByteArray
 stringToByteArray = byteArrayFromList . concatMap char2utf8
@@ -70,3 +74,12 @@ unicode2utf8 c
     | c < 0x800   = [0xc0 .|. (c `shiftR` 6), 0x80 .|. (0x3f .&. c)]
     | c < 0x10000 = [0xe0 .|. (c `shiftR` 12), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
     | otherwise   = [0xf0 .|. (c `shiftR` 18), 0x80 .|. (0x3f .&. (c `shiftR` 12)), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
+
+readFile :: FilePath -> IO Text
+readFile path = do
+  contents <- BS.readFile path
+  array <- newByteArray $ BS.length contents
+  for_ [0..BS.length contents - 1] $ \i -> do
+    writeByteArray array i $ BS.index contents i
+  array' <- unsafeFreezeByteArray array
+  pure $ Text array' 0 $ BS.length contents
