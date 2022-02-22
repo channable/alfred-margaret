@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 # clize turns this into a CLI where program is a required argument and prefix is a required option
-def benchmark(program, *, prefix):
+def benchmark(program, *, prefix, data_directory="data"):
     """
     This script runs an executable 5 times and collects the running times it
     reports. Names of the .txt files in the data/ directory are provivided to the
@@ -21,6 +21,7 @@ def benchmark(program, *, prefix):
 
     :param program: What to benchmark.
     :param prefix: Used for generating output files $prefix.{stats,results}
+    :param data_directory: Directory containing the benchmark data files.
     """
 
     # # Disable automatic CPU frequency scaling to get lower variance measurements.
@@ -33,8 +34,8 @@ def benchmark(program, *, prefix):
         sys.exit(1)
 
     input_file_names = []
-    for f in os.listdir('data'):
-        file_name = f'data/{f}'
+    for f in os.listdir(data_directory):
+        file_name = os.path.join(data_directory, f)
         if os.path.isfile(file_name) and file_name.endswith('.txt'):
             input_file_names.append(os.path.abspath(file_name))
 
