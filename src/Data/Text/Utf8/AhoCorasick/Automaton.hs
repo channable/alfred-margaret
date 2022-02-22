@@ -487,3 +487,87 @@ runWithCase () seed f machine (Text !u8data !initialOffset !initialRemaining) =
 {-# INLINE runText #-}
 runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runText = runWithCase ()
+
+-- Assumes that the given Text contains a well-formed UTF-8 sequence
+{-# INLINE runLower #-}
+runLower :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
+runLower !seed !f !machine (Text !u8data !initialOffset !initialRemaining) =
+  consumeInput initialOffset initialRemaining seed initialState
+  where
+    initialState = 0
+
+    AcMachine !values !transitions !offsets !rootAsciiTransitions = machine
+
+    {-# NOINLINE consumeInput #-}
+    consumeInput :: Int -> Int -> a -> State -> a
+    consumeInput _offset 0 acc _state = acc
+    consumeInput !offset !remaining !acc !state
+      -- Code point is a single byte
+      | cu < 0xc0 = followCodeUnit (offset + 1) (remaining - 1) acc cu state
+      -- Code point is two bytes ==> decode and lowercase
+      | cu < 0xe0 = follow2CodeUnits (offset + 2) (remaining - 2) acc cu (indexTextArray u8data 1) state
+      -- Code point is three bytes ==> decode and lowercase
+      | cu < 0xf0 = follow3CodeUnits (offset + 3) (remaining - 3) acc cu (indexTextArray u8data 1) (indexTextArray u8data 2) state
+      -- Code point is four bytes ==> outside bmp
+      -- TODO: Now that we are handling multi-code unit code points anyways, we could just lower here too.
+      | otherwise = follow4CodeUnits (offset + 4) (remaining - 4) acc cu (indexTextArray u8data 1) (indexTextArray u8data 2) (indexTextArray u8data 3) state
+      where
+        !cu = indexTextArray u8data offset
+
+    {-# INLINE followCodeUnit #-}
+    followCodeUnit :: Int -> Int -> a -> CodeUnit -> State -> a
+    followCodeUnit !offset !remaining !acc !cu0 !state =
+      collectMatches offset remaining acc $ followCodeUnitEdge cu0 state
+
+    {-# INLINE follow2CodeUnits #-}
+    follow2CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> State -> a
+    follow2CodeUnits !offset !remaining !acc !cu0 !cu1 !state =
+      followCodeUnit offset remaining acc cu1 $ followCodeUnitEdge cu0 state
+
+    {-# INLINE follow3CodeUnits #-}
+    follow3CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> CodeUnit -> State -> a
+    follow3CodeUnits !offset !remaining !acc !cu0 !cu1 !cu2 !state =
+      follow2CodeUnits offset remaining acc cu1 cu2 $ followCodeUnitEdge cu0 state
+
+    {-# INLINE follow4CodeUnits #-}
+    follow4CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> State -> a
+    follow4CodeUnits !offset !remaining !acc !cu0 !cu1 !cu2 !cu3 !state =
+      follow3CodeUnits offset remaining acc cu1 cu2 cu3 $ followCodeUnitEdge cu0 state
+
+    {-# NOINLINE collectMatches #-}
+    collectMatches !offset !remaining !acc !state =
+      let
+        matchedValues = values `at` state
+        -- Fold over the matched values. If at any point the user-supplied fold
+        -- function returns `Done`, then we early out. Otherwise continue.
+        handleMatch !acc' vs = case vs of
+          []     -> consumeInput offset remaining acc' state
+          v:more -> case f acc' (Match (CodeUnitIndex $ offset - initialOffset) v) of
+            Step newAcc -> handleMatch newAcc more
+            Done finalAcc -> finalAcc
+      in
+        handleMatch acc matchedValues
+
+    {-# INLINE followCodeUnitEdge #-}
+    followCodeUnitEdge !cu !state
+      | state == initialState && cu < asciiCount = lookupRootAsciiTransition cu
+      | otherwise = lookupTransition state cu $ offsets `uAt` state
+
+    {-# INLINE lookupTransition #-}
+    lookupTransition :: State -> CodeUnit -> Int -> State
+    lookupTransition !state !cu !i
+      | transitionIsWildcard t     = if state == initialState then state
+                                                              else followCodeUnitEdge cu $ transitionState t
+      | transitionCodeUnit t == cu = transitionState t
+      | otherwise                  = lookupTransition state cu $ i + 1
+      where
+        !t = transitions `uAt` i
+
+    -- NOTE: there is no `state` argument here, because this case applies only
+    -- to the root state `stateInitial`.
+    {-# INLINE lookupRootAsciiTransition #-}
+    lookupRootAsciiTransition :: CodeUnit -> State
+    lookupRootAsciiTransition !input =
+      case rootAsciiTransitions `uAt` fromIntegral input of
+        t | transitionIsWildcard t -> initialState
+          | otherwise -> transitionState t
