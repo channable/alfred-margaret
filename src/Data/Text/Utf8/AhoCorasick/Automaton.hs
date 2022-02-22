@@ -40,6 +40,7 @@ import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), index
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as UVector
 import Data.Word (Word64)
+import Debug.Trace (trace)
 
 -- TYPES
 -- | A numbered state in the Aho-Corasick automaton.
@@ -509,19 +510,21 @@ runLower !seed !f !machine (Text !u8data !initialOffset !initialRemaining) =
       -- └───────────────┘
       | cu < 0xc0 =
         let
-          !cu' = if cu >= 0x61 && cu <= 0x7a then cu - 0x20 else cu
+          !cu' = if cu >= fromIntegral (Char.ord 'A') && cu <= fromIntegral (Char.ord 'Z') then cu + 0x20 else cu
         in followCodeUnit (offset + 1) (remaining - 1) acc cu' state
       -- ┌───────────────┬───────────────┐
       -- │1 1 0 x x x x x│1 0 x x x x x x│
       -- └───────────────┴───────────────┘
       -- Code point is two bytes ==> decode and lowercase
-      | cu < 0xe0 = followCodePoint (offset + 2) (remaining - 2) acc (decode2 cu $ indexTextArray u8data $ offset + 2) state
+      | cu < 0xe0 = followCodePoint (offset + 2) (remaining - 2) acc (decode2 cu $ indexTextArray u8data $ offset + 1) state
       -- ┌───────────────┬───────────────┬───────────────┐
       -- │1 1 1 0 x x x x│1 0 x x x x x x│1 0 x x x x x x│
       -- └───────────────┴───────────────┴───────────────┘
       -- Code point is three bytes ==> decode and lowercase
       | cu < 0xf0 = followCodePoint (offset + 3) (remaining - 3) acc (decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2)) state
-      -- Code point is four bytes ==> outside bmp
+      -- Code point is four bytes ==> definitely outside bmp
+      -- NOTE: There are code points that have 3 code units but are not in the BMP, i.e.
+      -- this code does not have exactly the same behavior as the old version.
       -- TODO: Now that we are handling code points with multiple code units anyways, we could just toLower here too.
       | otherwise = follow4CodeUnits (offset + 4) (remaining - 4) acc cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2) (indexTextArray u8data $ offset + 3) state
       where
@@ -531,8 +534,8 @@ runLower !seed !f !machine (Text !u8data !initialOffset !initialRemaining) =
     followCodePoint :: Int -> Int -> a -> Int -> State -> a
     followCodePoint !offset !remaining !acc !cp !state
       | lowerCp < 0x80 = followCodeUnit offset remaining acc (fromIntegral lowerCp) state
-      | lowerCp < 0x800 = follow2CodeUnits offset remaining acc (fromIntegral $ lowerCp `shiftR` 6) (fromIntegral $ lowerCp .&. 0x3f) state
-      | lowerCp < 0x10000 = follow3CodeUnits offset remaining acc (fromIntegral $ lowerCp `shiftR` 12) (fromIntegral $ (lowerCp `shiftR` 6) .&. 0x3f) (fromIntegral $ lowerCp .&. 0x3f) state
+      | lowerCp < 0x800 = follow2CodeUnits offset remaining acc (0xc0 .|. fromIntegral (lowerCp `shiftR` 6)) (0x80 .|. fromIntegral (lowerCp .&. 0x3f)) state
+      | lowerCp < 0x10000 = follow3CodeUnits offset remaining acc (0xe0 .|. fromIntegral (lowerCp `shiftR` 12)) (0x80 .|. fromIntegral ((lowerCp `shiftR` 6) .&. 0x3f)) (0x80 .|. fromIntegral (lowerCp .&. 0x3f)) state
       | otherwise = error "please handle code points with 4 code units separately"
       where
         !lowerCp = Char.ord $ Char.toLower $ Char.chr cp
@@ -550,7 +553,7 @@ runLower !seed !f !machine (Text !u8data !initialOffset !initialRemaining) =
     {-# INLINE followCodeUnit #-}
     followCodeUnit :: Int -> Int -> a -> CodeUnit -> State -> a
     followCodeUnit !offset !remaining !acc !cu0 !state =
-      collectMatches offset remaining acc $ followCodeUnitEdge cu0 state
+      {- trace (show (state, cu0)) $ -} collectMatches offset remaining acc $ followCodeUnitEdge cu0 state
 
     {-# INLINE follow2CodeUnits #-}
     follow2CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> State -> a
