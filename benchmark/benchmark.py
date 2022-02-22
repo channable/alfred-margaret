@@ -38,6 +38,9 @@ def benchmark(program, *, prefix, data_directory="data"):
         file_name = os.path.join(data_directory, f)
         if os.path.isfile(file_name) and file_name.endswith('.txt'):
             input_file_names.append(os.path.abspath(file_name))
+    
+    # Makes comparison of .results files easier
+    input_file_names.sort()
 
     print(f'Found {len(input_file_names)} files to benchmark.')
 
