@@ -1,8 +1,15 @@
 data/*.txt
+data-utf8/*.txt
 !data/example.txt
+!data-utf8/example.txt
 data/*.tar.xz
 *.stats
 *.results
+*.aux
+*.hp
+*.pdf
+*.prof
+*.ps
 
 java/bazel-bin
 java/bazel-genfiles

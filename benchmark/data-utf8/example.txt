@@ -1,0 +1,11 @@
+Henk
+Piet
+Klaas
+Sjaak
+Marieke
+
+Henk eet een appel en Piet eet kaas.
+Klaas eet ook kaas.
+Kaas is baas.
+Mari en Marieke wandelen door het bos.
+De auto van Sjaak heeft geen trekhaak en die van Klaas ook niet.
