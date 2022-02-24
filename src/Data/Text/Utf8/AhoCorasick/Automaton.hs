@@ -478,11 +478,9 @@ runWithCase !caseSensitivity !seed !f !machine !text =
           -- Code point is three bytes ==> decode and lowercase
           | cu < 0xf0 -> followLowerCodePoint (offset + 3) (remaining - 3) acc (Utf8.decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2)) state
 
-          -- Code point is four bytes ==> definitely outside bmp
-          -- NOTE: There are code points that have 3 code units but are not in the BMP, i.e.
-          -- this code does not have exactly the same behavior as the old version.
-          -- TODO: Now that we are handling code points with multiple code units anyways, we could just toLower here too.
-          | otherwise -> follow4CodeUnits (offset + 4) (remaining - 4) acc cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2) (indexTextArray u8data $ offset + 3) state
+          -- Code point is four bytes ==> decode and lowercase
+          -- NOTE: This implementation is not entirely the same as the UTF-16 one since it also handles code points outside the BMP.
+          | otherwise -> followLowerCodePoint (offset + 4) (remaining - 4) acc (Utf8.decode4 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2) (indexTextArray u8data $ offset + 3)) state
 
       where
         !cu = indexTextArray u8data offset
@@ -494,7 +492,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       | lowerCp < 0x80 = followCodeUnit offset remaining acc (fromIntegral lowerCp) state
       | lowerCp < 0x800 = follow2CodeUnits offset remaining acc (0xc0 .|. fromIntegral (lowerCp `shiftR` 6)) (0x80 .|. fromIntegral (lowerCp .&. 0x3f)) state
       | lowerCp < 0x10000 = follow3CodeUnits offset remaining acc (0xe0 .|. fromIntegral (lowerCp `shiftR` 12)) (0x80 .|. fromIntegral ((lowerCp `shiftR` 6) .&. 0x3f)) (0x80 .|. fromIntegral (lowerCp .&. 0x3f)) state
-      | otherwise = error "please handle code points with 4 code units separately"
+      | otherwise = follow4CodeUnits offset remaining acc (0xf0 .|. fromIntegral (lowerCp `shiftR` 18)) (0x80 .|. fromIntegral (lowerCp `shiftR` 12)) (0x80 .|. fromIntegral ((lowerCp `shiftR` 6) .&. 0x3f)) (0x80 .|. fromIntegral (lowerCp .&. 0x3f)) state
       where
         !lowerCp = Char.ord $ Char.toLower $ Char.chr cp
 

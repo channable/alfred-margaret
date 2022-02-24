@@ -14,6 +14,7 @@ module Data.Text.Utf8
     , Text (..)
     , decode2
     , decode3
+    , decode4
     , indexTextArray
     , pack
     , stringToByteArray
@@ -125,6 +126,20 @@ decode3 :: CodeUnit -> CodeUnit -> CodeUnit -> Int
 decode3 cu0 cu1 cu2 =
   (fromIntegral cu0 .&. 0xf) `shiftL` 12 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu2 .&. 0x3f)
 
+-- | Decode 4 UTF-8 code units into their code point.
+-- The given code units should have the following format:
+--
+-- @
+-- ┌───────────────┬───────────────┬───────────────┬───────────────┐
+-- │1 1 1 1 0 x x x│1 0 x x x x x x│1 0 x x x x x x│1 0 x x x x x x│
+-- └───────────────┴───────────────┴───────────────┴───────────────┘
+-- @
+{-# INLINE decode4 #-}
+decode4 :: CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> Int
+decode4 cu0 cu1 cu2 cu3 =
+  (fromIntegral cu0 .&. 0x7) `shiftL` 18 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 12 .|. (fromIntegral cu2 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu3 .&. 0x3f)
+
+-- | Lower-case the ASCII code points A-Z and leave the rest of ASCII intact.
 {-# INLINE toLowerAscii #-}
 toLowerAscii :: (Ord p, Num p) => p -> p
 toLowerAscii cu
