@@ -65,4 +65,4 @@ countMatches needles haystack = case needles of
       ac = Aho.build $ zip (map Utf8.unpackUtf8 needles) (repeat ())
       onMatch !n _match = Aho.Step (n + 1)
     in
-      Aho.runLower 0 onMatch ac haystack
+      Aho.runText 0 onMatch ac haystack
