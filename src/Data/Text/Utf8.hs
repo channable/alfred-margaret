@@ -7,7 +7,20 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
 
-module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text(..), unpackUtf8, Data.Text.Utf8.readFile, stringToByteArray, indexTextArray, unicode2utf8, pack, decode2, decode3) where
+module Data.Text.Utf8
+    ( CodeUnit
+    , CodeUnitIndex (..)
+    , Data.Text.Utf8.readFile
+    , Text (..)
+    , decode2
+    , decode3
+    , indexTextArray
+    , pack
+    , stringToByteArray
+    , toLowerAscii
+    , unicode2utf8
+    , unpackUtf8
+    ) where
 
 import Data.Bits (Bits (shiftL), shiftR, (.&.), (.|.))
 import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, indexByteArray,
@@ -17,6 +30,7 @@ import Data.Word (Word8)
 
 import qualified Data.ByteString as BS
 import Data.Char (ord)
+import qualified Data.Char as Char
 import Data.Foldable (for_)
 import GHC.Base (Int (I#), compareByteArrays#)
 import Prelude hiding (length)
@@ -110,3 +124,9 @@ decode2 cu0 cu1 =
 decode3 :: CodeUnit -> CodeUnit -> CodeUnit -> Int
 decode3 cu0 cu1 cu2 =
   (fromIntegral cu0 .&. 0xf) `shiftL` 12 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu2 .&. 0x3f)
+
+{-# INLINE toLowerAscii #-}
+toLowerAscii :: (Ord p, Num p) => p -> p
+toLowerAscii cu
+  | cu >= fromIntegral (Char.ord 'A') && cu <= fromIntegral (Char.ord 'Z') = cu + 0x20
+  | otherwise = cu

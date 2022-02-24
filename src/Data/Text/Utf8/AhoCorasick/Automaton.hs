@@ -381,6 +381,45 @@ data Next a = Done !a | Step !a
 
 -- | Run the automaton, possibly lowercasing the input text on the fly if case
 -- insensitivity is desired. See also `runLower`.
+--
+-- The code of this function itself is organized as a state machine as well.
+-- Each state in the diagram below corresponds to a function defined in
+-- 'runWithCase'. These functions are written in a way such that GHC identifies them
+-- as [join points](https://www.microsoft.com/en-us/research/publication/compiling-without-continuations/).
+-- This means that they can be compiled to jumps instead of function calls, which helps performance a lot.
+--
+-- @
+-- ┌────────────┐   ┌────────────────┐
+-- │consumeInput├───►followCodeUnits │
+-- └─▲──────────┘   └─▲────────────┬─┘
+--   │                │            │
+--   │              ┌─┴────────────▼─┐   ┌──────────────┐
+--   │              │lookupTransition├───►collectMatches│
+--   │              └────▲──────┬────┘   └────────────┬─┘
+--   │                   │      │                     │
+--   │                   └──────┘                     │
+--   │                                                │
+--   └────────────────────────────────────────────────┘
+-- @
+--
+-- * 'consumeInput' inspects the next code unit in the input and decides what to do with it.
+--   If necessary, it decodes a code point of up to four code units and passes them to 'followCodeUnits'.
+-- * 'followCodeUnits' pops an entry from the code unit queue and passes it to 'lookupTransition'.
+-- * 'lookupTransition' checks whether the given code unit matches any transitions at the given state.
+--   If so, it follows the transition and then loops back to 'followCodeUnits' if the code unit queue
+--   is not empty and otherwise calls 'collectMatches'.
+-- * 'collectMatches' checks whether the current state is accepting and updates the accumulator accordingly.
+--   Afterwards it loops back to 'consumeInput'.
+--
+-- NOTE: 'followCodeUnits' is actually inlined into 'consumeInput' and 'lookupTransition' by GHC.
+-- It is included in the diagram for illustrative reasons only.
+--
+-- All of these functions have the arguments 'offset', 'remaining' and 'acc' which encode the current input
+-- position and the accumulator, which contains the matches.
+-- Functions in the loop including 'followCodeUnits' and 'lookupTransition' also contain arguments for the
+-- code unit queue. Currently, the code unit queue is implemented as a single 'Word32' argument which
+-- contains 0-4 packed code units.
+--
 -- WARNING: Run benchmarks when modifying this function; its performance is
 -- fragile. It took many days to discover the current formulation which compiles
 -- to fast code; removing the wrong bang pattern could cause a 10% performance
@@ -395,6 +434,21 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     Text !u8data !initialOffset !initialRemaining = text
     AcMachine !values !transitions !offsets !rootAsciiTransitions = machine
 
+    -- NOTE: All of the arguments are strict here, because we want to compile
+    -- them down to unpacked variables on the stack, or even registers.
+
+    -- When we follow an edge, we look in the transition table and do a
+    -- linear scan over all transitions until we find the right one, or
+    -- until we hit the wildcard transition at the end. For 0 or 1 or 2
+    -- transitions that is fine, but the initial state often has more
+    -- transitions, so we have a dedicated lookup table for it, that takes
+    -- up a bit more space, but provides O(1) lookup of the next state. We
+    -- only do this for the first 128 code units (all of ascii).
+
+    -- | Consume a code unit sequence that constitutes a full code point.
+    -- If the code unit at 'offset' is ASCII, we can lower it using 'Utf8.toLowerAscii'.
+    -- Otherwise we have to assume that lowercasing it will change the length of the code unit sequence.
+    -- Therefore we have to invoke 'followCodeUnits', which keeps a queue of code units and looks up their transitions one after the other.
     {-# NOINLINE consumeInput #-}
     consumeInput :: Int -> Int -> a -> State -> a
     consumeInput _offset 0 acc _state = acc
@@ -406,28 +460,34 @@ runWithCase !caseSensitivity !seed !f !machine !text =
           if cu < asciiCount && state == initialState
             then lookupRootAsciiTransition (offset + 1) (remaining - 1) acc cu
             else followCodeUnit (offset + 1) (remaining - 1) acc cu state
-        -- Code point is a single byte ==> It's ASCII, no need to call toLower; we can just use maths :)
-        -- We could check < asciiCount here as well, since there are no UTF-8 code unit sequences starting with 10xxxxxx
-        _ | cu < 0xc0 ->
-          let
-            !cu' = if cu >= fromIntegral (Char.ord 'A') && cu <= fromIntegral (Char.ord 'Z') then cu + 0x20 else cu
-          in
-            if state == initialState
-              then lookupRootAsciiTransition (offset + 1) (remaining - 1) acc cu'
-              else followCodeUnit (offset + 1) (remaining - 1) acc cu' state
-        -- Code point is two bytes ==> decode and lowercase
-        _ | cu < 0xe0 -> followLowerCodePoint (offset + 2) (remaining - 2) acc (Utf8.decode2 cu $ indexTextArray u8data $ offset + 1) state
-        -- Code point is three bytes ==> decode and lowercase
-        _ | cu < 0xf0 -> followLowerCodePoint (offset + 3) (remaining - 3) acc (Utf8.decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2)) state
-        -- Code point is four bytes ==> definitely outside bmp
-        -- NOTE: There are code points that have 3 code units but are not in the BMP, i.e.
-        -- this code does not have exactly the same behavior as the old version.
-        -- TODO: Now that we are handling code points with multiple code units anyways, we could just toLower here too.
-        _ -> follow4CodeUnits (offset + 4) (remaining - 4) acc cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2) (indexTextArray u8data $ offset + 3) state
+
+        IgnoreCase
+          -- Code point is a single byte ==> It's ASCII, no need to call toLower; we can just use maths :)
+          -- We could check < asciiCount here as well, since there are no UTF-8 code unit sequences starting with 10xxxxxx
+          | cu < 0xc0 ->
+            let
+              !cu' = Utf8.toLowerAscii cu
+            in
+              if state == initialState
+                then lookupRootAsciiTransition (offset + 1) (remaining - 1) acc cu'
+                else followCodeUnit (offset + 1) (remaining - 1) acc cu' state
+
+          -- Code point is two bytes ==> decode and lowercase
+          | cu < 0xe0 -> followLowerCodePoint (offset + 2) (remaining - 2) acc (Utf8.decode2 cu $ indexTextArray u8data $ offset + 1) state
+
+          -- Code point is three bytes ==> decode and lowercase
+          | cu < 0xf0 -> followLowerCodePoint (offset + 3) (remaining - 3) acc (Utf8.decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2)) state
+
+          -- Code point is four bytes ==> definitely outside bmp
+          -- NOTE: There are code points that have 3 code units but are not in the BMP, i.e.
+          -- this code does not have exactly the same behavior as the old version.
+          -- TODO: Now that we are handling code points with multiple code units anyways, we could just toLower here too.
+          | otherwise -> follow4CodeUnits (offset + 4) (remaining - 4) acc cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2) (indexTextArray u8data $ offset + 3) state
+
       where
         !cu = indexTextArray u8data offset
 
-    -- Lowers the given code point, translates it back into code units and follows those.
+    -- | Lowers the given code point, translates it back into code units and follows those.
     {-# INLINE followLowerCodePoint #-}
     followLowerCodePoint :: Int -> Int -> a -> Int -> State -> a
     followLowerCodePoint !offset !remaining !acc !cp !state
@@ -438,7 +498,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       where
         !lowerCp = Char.ord $ Char.toLower $ Char.chr cp
 
-    -- | Follows 0-4 code units packed into a Word32.
+    -- | Follows 1-4 code units packed into a Word32.
     {-# INLINE followCodeUnits #-}
     followCodeUnits :: Int -> Int -> a -> Word32 -> State -> a
     -- followCodeUnits !offset !remaining !acc 0 !state = collectMatches offset remaining acc state
@@ -453,6 +513,8 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     followEdge !offset !remaining !acc !cu !cus !state =
       lookupTransition offset remaining acc cu cus state $ offsets `uAt` state
 
+    -- NOTE: there is no `state` argument here, because this case applies only
+    -- to the root state `stateInitial`.
     {-# INLINE lookupRootAsciiTransition #-}
     lookupRootAsciiTransition !offset !remaining !acc !cu
       -- Given code unit does not match at root => Repeat at offset from initial state
@@ -461,7 +523,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       | otherwise = collectMatches offset remaining acc $ transitionState t
       where !t = rootAsciiTransitions `uAt` fromIntegral cu
 
-    -- This function can't be inlined since it is self-recursive.
+    -- NOTE: This function can't be inlined since it is self-recursive.
     {-# NOINLINE lookupTransition #-}
     lookupTransition :: Int -> Int -> a -> CodeUnit -> Word32 -> State -> Int -> a
     lookupTransition !offset !remaining !acc !cu !cus !state !i
@@ -487,12 +549,12 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       where
         !t = transitions `uAt` i
 
-    -- TODO: In this case, we could avoid the loop in followCodeUnits and just follow a single edge.
+    -- TODO: In this case, we could avoid the loop in loookupTransition completely and just follow a single edge.
     -- Should be worth investigating but could lead to some code duplication.
     {-# INLINE followCodeUnit #-}
     followCodeUnit :: Int -> Int -> a -> CodeUnit -> State -> a
     followCodeUnit !offset !remaining !acc !cu0 !state =
-      followCodeUnits offset remaining acc (fromIntegral cu0) state
+      followEdge offset remaining acc (fromIntegral cu0) 0 state
 
     {-# INLINE follow2CodeUnits #-}
     follow2CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> State -> a
