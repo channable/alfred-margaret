@@ -37,9 +37,10 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
+import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as UVector
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 
 data CaseSensitivity = CaseSensitive | IgnoreCase
   deriving Eq
@@ -401,16 +402,23 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       case caseSensitivity of
         -- If we are doing case sensitive matching, we can just use the unmodified
         -- input code units.
-        CaseSensitive -> followCodeUnit (offset + 1) (remaining - 1) acc cu state
+        CaseSensitive ->
+          if cu < asciiCount && state == initialState
+            then lookupRootAsciiTransition (offset + 1) (remaining - 1) acc cu
+            else followCodeUnit (offset + 1) (remaining - 1) acc cu state
         -- Code point is a single byte ==> It's ASCII, no need to call toLower; we can just use maths :)
+        -- We could check < asciiCount here as well, since there are no UTF-8 code unit sequences starting with 10xxxxxx
         _ | cu < 0xc0 ->
           let
             !cu' = if cu >= fromIntegral (Char.ord 'A') && cu <= fromIntegral (Char.ord 'Z') then cu + 0x20 else cu
-          in followCodeUnit (offset + 1) (remaining - 1) acc cu' state
+          in
+            if state == initialState
+              then lookupRootAsciiTransition (offset + 1) (remaining - 1) acc cu'
+              else followCodeUnit (offset + 1) (remaining - 1) acc cu' state
         -- Code point is two bytes ==> decode and lowercase
-        _ | cu < 0xe0 -> followLowerCodePoint (offset + 2) (remaining - 2) acc (decode2 cu $ indexTextArray u8data $ offset + 1) state
+        _ | cu < 0xe0 -> followLowerCodePoint (offset + 2) (remaining - 2) acc (Utf8.decode2 cu $ indexTextArray u8data $ offset + 1) state
         -- Code point is three bytes ==> decode and lowercase
-        _ | cu < 0xf0 -> followLowerCodePoint (offset + 3) (remaining - 3) acc (decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2)) state
+        _ | cu < 0xf0 -> followLowerCodePoint (offset + 3) (remaining - 3) acc (Utf8.decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2)) state
         -- Code point is four bytes ==> definitely outside bmp
         -- NOTE: There are code points that have 3 code units but are not in the BMP, i.e.
         -- this code does not have exactly the same behavior as the old version.
@@ -430,43 +438,76 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       where
         !lowerCp = Char.ord $ Char.toLower $ Char.chr cp
 
-    -- Decode 2 UTF-8 code units into their code point.
-    -- ┌───────────────┬───────────────┐
-    -- │1 1 0 x x x x x│1 0 x x x x x x│
-    -- └───────────────┴───────────────┘
-    {-# INLINE decode2 #-}
-    decode2 :: CodeUnit -> CodeUnit -> Int
-    decode2 cu0 cu1 =
-      (fromIntegral cu0 .&. 0x1f) `shiftL` 6 .|. fromIntegral cu1 .&. 0x3f
+    -- | Follows 0-4 code units packed into a Word32.
+    {-# INLINE followCodeUnits #-}
+    followCodeUnits :: Int -> Int -> a -> Word32 -> State -> a
+    -- followCodeUnits !offset !remaining !acc 0 !state = collectMatches offset remaining acc state
+    followCodeUnits !offset !remaining !acc !cus !state =
+      followEdge offset remaining acc cu0 cus' state
+      where
+        cu0 = fromIntegral $ cus .&. 0xff
+        cus' = cus `shiftR` 8
 
-    -- Decode 3 UTF-8 code unit into their code point.
-    -- ┌───────────────┬───────────────┬───────────────┐
-    -- │1 1 1 0 x x x x│1 0 x x x x x x│1 0 x x x x x x│
-    -- └───────────────┴───────────────┴───────────────┘
-    {-# INLINE decode3 #-}
-    decode3 :: CodeUnit -> CodeUnit -> CodeUnit -> Int
-    decode3 cu0 cu1 cu2 =
-      (fromIntegral cu0 .&. 0xf) `shiftL` 12 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu2 .&. 0x3f)
+    {-# INLINE followEdge #-}
+    followEdge :: Int -> Int -> a -> CodeUnit -> Word32 -> State -> a
+    followEdge !offset !remaining !acc !cu !cus !state =
+      lookupTransition offset remaining acc cu cus state $ offsets `uAt` state
 
+    {-# INLINE lookupRootAsciiTransition #-}
+    lookupRootAsciiTransition !offset !remaining !acc !cu
+      -- Given code unit does not match at root => Repeat at offset from initial state
+      | transitionIsWildcard t = consumeInput offset remaining acc initialState
+      -- Transition matched!
+      | otherwise = collectMatches offset remaining acc $ transitionState t
+      where !t = rootAsciiTransitions `uAt` fromIntegral cu
+
+    -- This function can't be inlined since it is self-recursive.
+    {-# NOINLINE lookupTransition #-}
+    lookupTransition :: Int -> Int -> a -> CodeUnit -> Word32 -> State -> Int -> a
+    lookupTransition !offset !remaining !acc !cu !cus !state !i
+      -- There is no transition for the given input. Follow the fallback edge,
+      -- and try again from that state, etc. If we are in the base state
+      -- already, then nothing matched, so move on to the next input.
+      | transitionIsWildcard t =
+        if state == initialState
+          then consumeInput offset remaining acc state
+          else followEdge offset remaining acc cu cus (transitionState t)
+      -- We found the transition, switch to that new state, possibly matching the rest of cus.
+      -- NOTE: This comes after wildcard checking, because the code unit of
+      -- the wildcard transition is 0, which is a valid input.
+      | transitionCodeUnit t == cu =
+        if cus == 0
+          then collectMatches offset remaining acc (transitionState t)
+          else followCodeUnits offset remaining acc cus (transitionState t)
+      -- The transition we inspected is not for the current input, and it is not
+      -- a wildcard either; look at the next transition then.
+      | otherwise =
+        lookupTransition offset remaining acc cu cus state $ i + 1
+
+      where
+        !t = transitions `uAt` i
+
+    -- TODO: In this case, we could avoid the loop in followCodeUnits and just follow a single edge.
+    -- Should be worth investigating but could lead to some code duplication.
     {-# INLINE followCodeUnit #-}
     followCodeUnit :: Int -> Int -> a -> CodeUnit -> State -> a
     followCodeUnit !offset !remaining !acc !cu0 !state =
-      {- trace (show (state, cu0)) $ -} collectMatches offset remaining acc $ followCodeUnitEdge cu0 state
+      followCodeUnits offset remaining acc (fromIntegral cu0) state
 
     {-# INLINE follow2CodeUnits #-}
     follow2CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> State -> a
     follow2CodeUnits !offset !remaining !acc !cu0 !cu1 !state =
-      followCodeUnit offset remaining acc cu1 $ followCodeUnitEdge cu0 state
+      followCodeUnits offset remaining acc (fromIntegral cu0 .|. fromIntegral cu1 `shiftL` 8) state
 
     {-# INLINE follow3CodeUnits #-}
     follow3CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> CodeUnit -> State -> a
     follow3CodeUnits !offset !remaining !acc !cu0 !cu1 !cu2 !state =
-      follow2CodeUnits offset remaining acc cu1 cu2 $ followCodeUnitEdge cu0 state
+      followCodeUnits offset remaining acc (fromIntegral cu0 .|. fromIntegral cu1 `shiftL` 8 .|. fromIntegral cu2 `shiftL` 16) state
 
     {-# INLINE follow4CodeUnits #-}
     follow4CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> State -> a
     follow4CodeUnits !offset !remaining !acc !cu0 !cu1 !cu2 !cu3 !state =
-      follow3CodeUnits offset remaining acc cu1 cu2 cu3 $ followCodeUnitEdge cu0 state
+      followCodeUnits offset remaining acc (fromIntegral cu0 .|. fromIntegral cu1 `shiftL` 8 .|. fromIntegral cu2 `shiftL` 16 .|. fromIntegral cu3 `shiftL` 24) state
 
     {-# NOINLINE collectMatches #-}
     collectMatches !offset !remaining !acc !state =
@@ -481,47 +522,6 @@ runWithCase !caseSensitivity !seed !f !machine !text =
             Done finalAcc -> finalAcc
       in
         handleMatch acc matchedValues
-
-    -- When we follow an edge, we look in the transition table and do a
-    -- linear scan over all transitions until we find the right one, or
-    -- until we hit the wildcard transition at the end. For 0 or 1 or 2
-    -- transitions that is fine, but the initial state often has more
-    -- transitions, so we have a dedicated lookup table for it, that takes
-    -- up a bit more space, but provides O(1) lookup of the next state. We
-    -- only do this for the first 128 code units (all of ascii).
-    {-# INLINE followCodeUnitEdge #-}
-    followCodeUnitEdge !cu !state
-      | state == initialState && cu < asciiCount = lookupRootAsciiTransition cu
-      | otherwise = lookupTransition state cu $ offsets `uAt` state
-
-    {-# INLINE lookupTransition #-}
-    lookupTransition :: State -> CodeUnit -> Int -> State
-    lookupTransition !state !cu !i
-      -- There is no transition for the given input. Follow the fallback edge,
-      -- and try again from that state, etc. If we are in the base state
-      -- already, then nothing matched, so move on to the next input.
-      | transitionIsWildcard t     =
-        if state == initialState
-          then state
-          else followCodeUnitEdge cu $ transitionState t
-      -- We found the transition, switch to that new state, collecting matches.
-      -- NOTE: This comes after wildcard checking, because the code unit of
-      -- the wildcard transition is 0, which is a valid input.
-      | transitionCodeUnit t == cu = transitionState t
-      -- The transition we inspected is not for the current input, and it is not
-      -- a wildcard either; look at the next transition then.
-      | otherwise                  = lookupTransition state cu $ i + 1
-      where
-        !t = transitions `uAt` i
-
-    -- NOTE: there is no `state` argument here, because this case applies only
-    -- to the root state `stateInitial`.
-    {-# INLINE lookupRootAsciiTransition #-}
-    lookupRootAsciiTransition :: CodeUnit -> State
-    lookupRootAsciiTransition !input =
-      case rootAsciiTransitions `uAt` fromIntegral input of
-        t | transitionIsWildcard t -> initialState
-          | otherwise -> transitionState t
 
 -- NOTE: To get full advantage of inlining this function, you probably want to
 -- compile the compiling module with -fllvm and the same optimization flags as

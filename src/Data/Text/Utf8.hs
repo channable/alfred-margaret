@@ -7,9 +7,9 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
 
-module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text(..), unpackUtf8, Data.Text.Utf8.readFile, stringToByteArray, indexTextArray, unicode2utf8, pack) where
+module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text(..), unpackUtf8, Data.Text.Utf8.readFile, stringToByteArray, indexTextArray, unicode2utf8, pack, decode2, decode3) where
 
-import Data.Bits (Bits, shiftR, (.&.), (.|.))
+import Data.Bits (Bits (shiftL), shiftR, (.&.), (.|.))
 import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, indexByteArray,
                                  newByteArray, sizeofByteArray, unsafeFreezeByteArray,
                                  writeByteArray)
@@ -83,3 +83,30 @@ readFile path = do
     writeByteArray array i $ BS.index contents i
   array' <- unsafeFreezeByteArray array
   pure $ Text array' 0 $ BS.length contents
+
+
+-- | Decode 2 UTF-8 code units into their code point.
+-- The given code units should have the following format: ->
+--
+-- @
+-- ┌───────────────┬───────────────┐
+-- │1 1 0 x x x x x│1 0 x x x x x x│
+-- └───────────────┴───────────────┘
+-- @
+{-# INLINE decode2 #-}
+decode2 :: CodeUnit -> CodeUnit -> Int
+decode2 cu0 cu1 =
+  (fromIntegral cu0 .&. 0x1f) `shiftL` 6 .|. fromIntegral cu1 .&. 0x3f
+
+-- | Decode 3 UTF-8 code units into their code point.
+-- The given code units should have the following format:
+--
+-- @
+-- ┌───────────────┬───────────────┬───────────────┐
+-- │1 1 1 0 x x x x│1 0 x x x x x x│1 0 x x x x x x│
+-- └───────────────┴───────────────┴───────────────┘
+-- @
+{-# INLINE decode3 #-}
+decode3 :: CodeUnit -> CodeUnit -> CodeUnit -> Int
+decode3 cu0 cu1 cu2 =
+  (fromIntegral cu0 .&. 0xf) `shiftL` 12 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu2 .&. 0x3f)

@@ -26,10 +26,24 @@ spec = do
         it "encodes Hwair" $ utf8Test "𐍈" [0xf0, 0x90, 0x8d, 0x88]
         it "encodes all of the above" $ utf8Test "$€£𐍈" [0x24, 0xe2, 0x82, 0xac, 0xc2, 0xa3, 0xf0, 0x90, 0x8d, 0x88]
 
-    describe "runText" $ do
+    describe "case sensitive search" $ do
         describe "countMatches" $ do
             it "counts the right number of matches in a basic example" $ do
-                countMatches ["abc", "rst", "xyz"] "abcdefghijklmnopqrstuvwxyz" `shouldBe` 3
+                countMatches Aho.CaseSensitive ["abc", "rst", "xyz"] "abcdefghijklmnopqrstuvwxyz" `shouldBe` 3
+
+            it "counts the right number of matches in an example with 1-, 2-, 3- and 4-code unit code points" $ do
+                countMatches Aho.CaseSensitive ["$", "£"] "$€£𐍈" `shouldBe` 2
+
+    describe "case insensitive search" $ do
+        describe "countMatches" $ do
+            it "counts the right number of matches in a basic example" $ do
+                countMatches Aho.IgnoreCase ["abc", "rst", "xyz"] "abcdefghijklmnopqrstuvwxyz" `shouldBe` 3
+
+            it "does not work with uppercase needles" $ do
+                countMatches Aho.IgnoreCase ["ABC", "Rst", "xYZ"] "abcdefghijklmnopqrstuvwxyz" `shouldBe` 0
+
+            it "works with characters that are not in ASCII" $ do
+                countMatches Aho.IgnoreCase ["groß", "öffnung", "tür"] "Großfräsmaschinenöffnungstür" `shouldBe` 3
 
 -- helpers
 
@@ -40,13 +54,13 @@ utf8Test :: String -> [Utf8.CodeUnit] -> Expectation
 utf8Test str byteList = fromString str `shouldBe` Utf8.Text (byteArrayFromList byteList) 0 (length byteList)
 
 -- From ./benchmark
-countMatches :: [Utf8.Text] -> Utf8.Text -> Int
+countMatches :: Aho.CaseSensitivity -> [Utf8.Text] -> Utf8.Text -> Int
 {-# NOINLINE countMatches #-}
-countMatches needles haystack = case needles of
+countMatches caseSensitivity needles haystack = case needles of
   [] -> 0
   _  ->
     let
       ac = Aho.build $ zip (map Utf8.unpackUtf8 needles) (repeat ())
       onMatch !n _match = Aho.Step (n + 1)
     in
-      Aho.runText 0 onMatch ac haystack
+      Aho.runWithCase caseSensitivity 0 onMatch ac haystack
