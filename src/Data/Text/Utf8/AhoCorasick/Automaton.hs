@@ -58,13 +58,14 @@ type State = Int
 -- wildcard; the "failure" transition. Bit 9 through 31 (starting from zero,
 -- both bounds inclusive) are always 0.
 --
---  Bit 63 (most significant)                 Bit 0 (least significant)
---  |                                                                 |
---  v                                                                 v
--- |<--       goto state         -->|<--       zeros     -->| |<-input>|
--- |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|00000000000000000000000|W|IIIIIIII|
---                                                           |
---                                                   Wildcard bit (bit 16)
+--
+-- >  Bit 63 (most significant)                 Bit 0 (least significant)
+-- >  |                                                                 |
+-- >  v                                                                 v
+-- > |<--       goto state         -->|<--       zeros     -->| |<-input>|
+-- > |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|00000000000000000000000|W|IIIIIIII|
+-- >                                                           |
+-- >                                                 Wildcard bit (bit 8)
 --
 -- If you change this representation, make sure to update 'transitionCodeUnit',
 -- 'wildcard', 'transitionState', 'transitionIsWildcard', 'newTransition' and
@@ -384,7 +385,7 @@ data Next a = Done !a | Step !a
 --
 -- The code of this function itself is organized as a state machine as well.
 -- Each state in the diagram below corresponds to a function defined in
--- 'runWithCase'. These functions are written in a way such that GHC identifies them
+-- `runWithCase`. These functions are written in a way such that GHC identifies them
 -- as [join points](https://www.microsoft.com/en-us/research/publication/compiling-without-continuations/).
 -- This means that they can be compiled to jumps instead of function calls, which helps performance a lot.
 --
@@ -402,22 +403,22 @@ data Next a = Done !a | Step !a
 --   └────────────────────────────────────────────────┘
 -- @
 --
--- * 'consumeInput' inspects the next code unit in the input and decides what to do with it.
---   If necessary, it decodes a code point of up to four code units and passes them to 'followCodeUnits'.
--- * 'followCodeUnits' pops an entry from the code unit queue and passes it to 'lookupTransition'.
--- * 'lookupTransition' checks whether the given code unit matches any transitions at the given state.
---   If so, it follows the transition and then loops back to 'followCodeUnits' if the code unit queue
---   is not empty and otherwise calls 'collectMatches'.
--- * 'collectMatches' checks whether the current state is accepting and updates the accumulator accordingly.
---   Afterwards it loops back to 'consumeInput'.
+-- * @consumeInput@ inspects the next code unit in the input and decides what to do with it.
+--   If necessary, it decodes a code point of up to four code units and passes them to @followCodeUnits@.
+-- * @followCodeUnits@ pops an entry from the code unit queue and passes it to @lookupTransition@.
+-- * @lookupTransition@ checks whether the given code unit matches any transitions at the given state.
+--   If so, it follows the transition and then loops back to @followCodeUnits@ if the code unit queue
+--   is not empty and otherwise calls @collectMatches@.
+-- * @collectMatches@ checks whether the current state is accepting and updates the accumulator accordingly.
+--   Afterwards it loops back to @consumeInput@.
 --
--- NOTE: 'followCodeUnits' is actually inlined into 'consumeInput' and 'lookupTransition' by GHC.
+-- NOTE: @followCodeUnits@ is actually inlined into @consumeInput@ and @lookupTransition@ by GHC.
 -- It is included in the diagram for illustrative reasons only.
 --
--- All of these functions have the arguments 'offset', 'remaining' and 'acc' which encode the current input
+-- All of these functions have the arguments @offset@, @remaining@ and @acc@ which encode the current input
 -- position and the accumulator, which contains the matches.
--- Functions in the loop including 'followCodeUnits' and 'lookupTransition' also contain arguments for the
--- code unit queue. Currently, the code unit queue is implemented as a single 'Word32' argument which
+-- Functions in the loop including @followCodeUnits@ and @lookupTransition@ also contain arguments for the
+-- code unit queue. Currently, the code unit queue is implemented as a single `Word32` argument which
 -- contains 0-4 packed code units.
 --
 -- WARNING: Run benchmarks when modifying this function; its performance is
@@ -446,9 +447,9 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     -- only do this for the first 128 code units (all of ascii).
 
     -- | Consume a code unit sequence that constitutes a full code point.
-    -- If the code unit at 'offset' is ASCII, we can lower it using 'Utf8.toLowerAscii'.
+    -- If the code unit at @offset@ is ASCII, we can lower it using 'Utf8.toLowerAscii'.
     -- Otherwise we have to assume that lowercasing it will change the length of the code unit sequence.
-    -- Therefore we have to invoke 'followCodeUnits', which keeps a queue of code units and looks up their transitions one after the other.
+    -- Therefore we have to invoke @followCodeUnits@, which keeps a queue of code units and looks up their transitions one after the other.
     {-# NOINLINE consumeInput #-}
     consumeInput :: Int -> Int -> a -> State -> a
     consumeInput _offset 0 acc _state = acc
@@ -499,7 +500,6 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     -- | Follows 1-4 code units packed into a Word32.
     {-# INLINE followCodeUnits #-}
     followCodeUnits :: Int -> Int -> a -> Word32 -> State -> a
-    -- followCodeUnits !offset !remaining !acc 0 !state = collectMatches offset remaining acc state
     followCodeUnits !offset !remaining !acc !cus !state =
       followEdge offset remaining acc cu0 cus' state
       where
@@ -515,7 +515,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     -- to the root state `stateInitial`.
     {-# INLINE lookupRootAsciiTransition #-}
     lookupRootAsciiTransition !offset !remaining !acc !cu
-      -- Given code unit does not match at root => Repeat at offset from initial state
+      -- Given code unit does not match at root ==> Repeat at offset from initial state
       | transitionIsWildcard t = consumeInput offset remaining acc initialState
       -- Transition matched!
       | otherwise = collectMatches offset remaining acc $ transitionState t
