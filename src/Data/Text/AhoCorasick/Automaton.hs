@@ -6,9 +6,7 @@
 
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | An efficient implementation of the Aho-Corasick string matching algorithm.
@@ -29,49 +27,34 @@
 -- automaton as int maps, which are convenient for incremental construction.
 -- Afterwards we pack the automaton into unboxed vectors.
 module Data.Text.AhoCorasick.Automaton
-  ( AcMachine (..)
-  , build
-  , runText
-  , runLower
-  , debugBuildDot
-  , CaseSensitivity (..)
-  , CodeUnitIndex (..)
-  , Match (..)
-  , Next (..)
-  )
-  where
+    ( AcMachine (..)
+    , CaseSensitivity (..)
+    , CodeUnitIndex (..)
+    , Match (..)
+    , Next (..)
+    , build
+    , debugBuildDot
+    , runLower
+    , runText
+    ) where
 
 import Prelude hiding (length)
 
 import Control.DeepSeq (NFData)
 import Data.Bits (shiftL, shiftR, (.&.), (.|.))
 import Data.Foldable (foldl')
-import Data.Hashable (Hashable)
 import Data.IntMap.Strict (IntMap)
 import Data.Text.Internal (Text (..))
 import Data.Word (Word64)
 import GHC.Generics (Generic)
-
-#if defined(HAS_AESON)
-import Data.Aeson (FromJSON, ToJSON)
-#endif
 
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as UVector
 
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), indexTextArray, lowerCodeUnit)
-
-data CaseSensitivity
-  = CaseSensitive
-  | IgnoreCase
-  deriving stock (Eq, Generic, Show)
-#if defined(HAS_AESON)
-  deriving anyclass (Hashable, NFData, FromJSON, ToJSON)
-#else
-  deriving anyclass (Hashable, NFData)
-#endif
 
 -- | A numbered state in the Aho-Corasick automaton.
 type State = Int

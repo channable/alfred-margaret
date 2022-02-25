@@ -46,6 +46,7 @@ library
                      , Data.Text.BoyerMoore.Automaton
                      , Data.Text.BoyerMoore.Replacer
                      , Data.Text.BoyerMoore.Searcher
+                     , Data.Text.CaseSensitivity
                      , Data.Text.Utf16
                      , Data.Text.Utf8
                      , Data.Text.Utf8.AhoCorasick.Automaton

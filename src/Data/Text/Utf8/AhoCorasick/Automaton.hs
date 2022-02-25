@@ -27,7 +27,18 @@
 --
 -- This module is a rewrite of the previous version which used an older version of
 -- the 'text' package which in turn used UTF-16 internally.
-module Data.Text.Utf8.AhoCorasick.Automaton where
+module Data.Text.Utf8.AhoCorasick.Automaton
+    ( AcMachine (..)
+    , CaseSensitivity (..)
+    , CodeUnitIndex (..)
+    , Match (..)
+    , Next (..)
+    , build
+    , debugBuildDot
+    , runLower
+    , runText
+    , runWithCase
+    ) where
 
 import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
@@ -41,12 +52,10 @@ import qualified Data.List as List
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as UVector
 
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
 
 import qualified Data.Text.Utf8 as Utf8
-
-data CaseSensitivity = CaseSensitive | IgnoreCase
-  deriving Eq
 
 -- TYPES
 -- | A numbered state in the Aho-Corasick automaton.
