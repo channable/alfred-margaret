@@ -198,6 +198,12 @@ steps:
   # Remove trailing whitespace
   - trailing_whitespace: {}
 
+  - module_header:
+      indent: 4
+      sort: true
+      break_where: exports
+      open_bracket: next_line
+
 # A common setting is the number of columns (parts of) code will be wrapped
 # to. Different steps take this into account. Default: 80.
 columns: 100

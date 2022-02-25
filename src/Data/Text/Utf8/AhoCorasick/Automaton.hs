@@ -27,18 +27,35 @@
 --
 -- This module is a rewrite of the previous version which used an older version of
 -- the 'text' package which in turn used UTF-16 internally.
-module Data.Text.Utf8.AhoCorasick.Automaton where
+module Data.Text.Utf8.AhoCorasick.Automaton
+    ( AcMachine (..)
+    , CaseSensitivity (..)
+    , CodeUnitIndex (..)
+    , Match (..)
+    , Next (..)
+    , build
+    , debugBuildDot
+    , runLower
+    , runText
+    , runWithCase
+    ) where
 
 import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
 import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
+import Data.Word (Word32, Word64)
+
+import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
-import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as UVector
-import Data.Word (Word64)
+
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
+import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
+
+import qualified Data.Text.Utf8 as Utf8
 
 -- TYPES
 -- | A numbered state in the Aho-Corasick automaton.
@@ -53,13 +70,14 @@ type State = Int
 -- wildcard; the "failure" transition. Bit 9 through 31 (starting from zero,
 -- both bounds inclusive) are always 0.
 --
---  Bit 63 (most significant)                 Bit 0 (least significant)
---  |                                                                 |
---  v                                                                 v
--- |<--       goto state         -->|<--       zeros     -->| |<-input>|
--- |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|00000000000000000000000|W|IIIIIIII|
---                                                           |
---                                                   Wildcard bit (bit 16)
+--
+-- >  Bit 63 (most significant)                 Bit 0 (least significant)
+-- >  |                                                                 |
+-- >  v                                                                 v
+-- > |<--       goto state         -->|<--       zeros     -->| |<-input>|
+-- > |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|00000000000000000000000|W|IIIIIIII|
+-- >                                                           |
+-- >                                                 Wildcard bit (bit 8)
 --
 -- If you change this representation, make sure to update 'transitionCodeUnit',
 -- 'wildcard', 'transitionState', 'transitionIsWildcard', 'newTransition' and
@@ -170,8 +188,8 @@ build needlesWithValues =
     values = Vector.generate numStates (valueMap IntMap.!)
   in
     AcMachine values transitions offsets rootTransitions
--- | Build the automaton, and format it as Graphviz Dot, for visual debugging.
 
+-- | Build the automaton, and format it as Graphviz Dot, for visual debugging.
 debugBuildDot :: [[CodeUnit]] -> String
 debugBuildDot needles =
   let
@@ -374,67 +392,196 @@ uAt = UVector.unsafeIndex
 -- returning a `Done`, or it can continue with a new accumulator with `Step`.
 data Next a = Done !a | Step !a
 
--- | The unit parameter here is a placeholder for a future CaseSensitivity flag,
--- see old module.
+-- | Run the automaton, possibly lowercasing the input text on the fly if case
+-- insensitivity is desired. See also `runLower`.
+--
+-- The code of this function itself is organized as a state machine as well.
+-- Each state in the diagram below corresponds to a function defined in
+-- `runWithCase`. These functions are written in a way such that GHC identifies them
+-- as [join points](https://www.microsoft.com/en-us/research/publication/compiling-without-continuations/).
+-- This means that they can be compiled to jumps instead of function calls, which helps performance a lot.
+--
+-- @
+-- ┌────────────┐   ┌────────────────┐
+-- │consumeInput├───►followCodeUnits │
+-- └─▲──────────┘   └─▲────────────┬─┘
+--   │                │            │
+--   │              ┌─┴────────────▼─┐   ┌──────────────┐
+--   │              │lookupTransition├───►collectMatches│
+--   │              └────▲──────┬────┘   └────────────┬─┘
+--   │                   │      │                     │
+--   │                   └──────┘                     │
+--   │                                                │
+--   └────────────────────────────────────────────────┘
+-- @
+--
+-- * @consumeInput@ inspects the next code unit in the input and decides what to do with it.
+--   If necessary, it decodes a code point of up to four code units and passes them to @followCodeUnits@.
+-- * @followCodeUnits@ pops an entry from the code unit queue and passes it to @lookupTransition@.
+-- * @lookupTransition@ checks whether the given code unit matches any transitions at the given state.
+--   If so, it follows the transition and then loops back to @followCodeUnits@ if the code unit queue
+--   is not empty and otherwise calls @collectMatches@.
+-- * @collectMatches@ checks whether the current state is accepting and updates the accumulator accordingly.
+--   Afterwards it loops back to @consumeInput@.
+--
+-- NOTE: @followCodeUnits@ is actually inlined into @consumeInput@ and @lookupTransition@ by GHC.
+-- It is included in the diagram for illustrative reasons only.
+--
+-- All of these functions have the arguments @offset@, @remaining@ and @acc@ which encode the current input
+-- position and the accumulator, which contains the matches.
+-- Functions in the loop including @followCodeUnits@ and @lookupTransition@ also contain arguments for the
+-- code unit queue. Currently, the code unit queue is implemented as a single `Word32` argument which
+-- contains 0-4 packed code units.
+--
+-- WARNING: Run benchmarks when modifying this function; its performance is
+-- fragile. It took many days to discover the current formulation which compiles
+-- to fast code; removing the wrong bang pattern could cause a 10% performance
+-- regression.
 {-# INLINE runWithCase #-}
-runWithCase
-  :: forall a v
-  .  ()
-  -> a
-  -> (a -> Match v -> Next a)
-  -> AcMachine v
-  -> Text
-  -> a
-runWithCase () seed f machine (Text !u8data !initialOffset !initialRemaining) =
-  let
-    !values = machineValues machine
-    !transitions = machineTransitions machine
-    !offsets = machineOffsets machine
-    !rootAsciiTransitions = machineRootAsciiTransitions machine
-    !stateInitial = 0
+runWithCase :: forall a v. CaseSensitivity -> a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
+runWithCase !caseSensitivity !seed !f !machine !text =
+  consumeInput initialOffset initialRemaining seed initialState
+  where
+    initialState = 0
+
+    Text !u8data !initialOffset !initialRemaining = text
+    AcMachine !values !transitions !offsets !rootAsciiTransitions = machine
 
     -- NOTE: All of the arguments are strict here, because we want to compile
     -- them down to unpacked variables on the stack, or even registers.
-    -- The INLINE / NOINLINE annotations here were added to fix a regression we
-    -- observed when going from GHC 8.2 to GHC 8.6, and this particular
-    -- combination of INLINE and NOINLINE is the fastest one. Removing increases
-    -- the benchmark running time by about 9%.
 
+    -- When we follow an edge, we look in the transition table and do a
+    -- linear scan over all transitions until we find the right one, or
+    -- until we hit the wildcard transition at the end. For 0 or 1 or 2
+    -- transitions that is fine, but the initial state often has more
+    -- transitions, so we have a dedicated lookup table for it, that takes
+    -- up a bit more space, but provides O(1) lookup of the next state. We
+    -- only do this for the first 128 code units (all of ascii).
+
+    -- | Consume a code unit sequence that constitutes a full code point.
+    -- If the code unit at @offset@ is ASCII, we can lower it using 'Utf8.toLowerAscii'.
+    -- Otherwise we have to assume that lowercasing it will change the length of the code unit sequence.
+    -- Therefore we have to invoke @followCodeUnits@, which keeps a queue of code units and looks up their transitions one after the other.
     {-# NOINLINE consumeInput #-}
     consumeInput :: Int -> Int -> a -> State -> a
+    consumeInput _offset 0 acc _state = acc
     consumeInput !offset !remaining !acc !state =
-      let
-        inputCodeUnit = fromIntegral $ indexTextArray u8data offset
-        -- NOTE: Although doing this match here entangles the automaton a bit
-        -- with case sensitivity, doing so is faster than passing in a function
-        -- that transforms each code unit.
-        -- casedCodeUnit = case caseSensitivity of
-        --  IgnoreCase    -> lowerCodeUnit inputCodeUnit
-        --  CaseSensitive -> inputCodeUnit
-      in
-        case remaining of
-          0 -> acc
-          _ -> followEdge (offset + 1) (remaining - 1) acc state inputCodeUnit
+      case caseSensitivity of
+        -- If we are doing case sensitive matching, we can just use the unmodified
+        -- input code units.
+        CaseSensitive ->
+          if cu < asciiCount && state == initialState
+            then lookupRootAsciiTransition (offset + 1) (remaining - 1) acc cu
+            else followCodeUnit (offset + 1) (remaining - 1) acc cu state
+
+        IgnoreCase
+          -- Code point is a single byte ==> It's ASCII, no need to call toLower; we can just use maths :)
+          -- We could check < asciiCount here as well, since there are no UTF-8 code unit sequences starting with 10xxxxxx
+          | cu < 0xc0 ->
+            let
+              !cu' = Utf8.toLowerAscii cu
+            in
+              if state == initialState
+                then lookupRootAsciiTransition (offset + 1) (remaining - 1) acc cu'
+                else followCodeUnit (offset + 1) (remaining - 1) acc cu' state
+
+          -- Code point is two bytes ==> decode and lowercase
+          | cu < 0xe0 -> followLowerCodePoint (offset + 2) (remaining - 2) acc (Utf8.decode2 cu $ indexTextArray u8data $ offset + 1) state
+
+          -- Code point is three bytes ==> decode and lowercase
+          | cu < 0xf0 -> followLowerCodePoint (offset + 3) (remaining - 3) acc (Utf8.decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2)) state
+
+          -- Code point is four bytes ==> decode and lowercase
+          -- NOTE: This implementation is not entirely the same as the UTF-16 one since it also handles code points outside the BMP.
+          | otherwise -> followLowerCodePoint (offset + 4) (remaining - 4) acc (Utf8.decode4 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2) (indexTextArray u8data $ offset + 3)) state
+
+      where
+        !cu = indexTextArray u8data offset
+
+    -- | Lowers the given code point, translates it back into code units and follows those.
+    {-# INLINE followLowerCodePoint #-}
+    followLowerCodePoint :: Int -> Int -> a -> Int -> State -> a
+    followLowerCodePoint !offset !remaining !acc !cp !state
+      | lowerCp < 0x80 = followCodeUnit offset remaining acc (fromIntegral lowerCp) state
+      | lowerCp < 0x800 = follow2CodeUnits offset remaining acc (0xc0 .|. fromIntegral (lowerCp `shiftR` 6)) (0x80 .|. fromIntegral (lowerCp .&. 0x3f)) state
+      | lowerCp < 0x10000 = follow3CodeUnits offset remaining acc (0xe0 .|. fromIntegral (lowerCp `shiftR` 12)) (0x80 .|. fromIntegral ((lowerCp `shiftR` 6) .&. 0x3f)) (0x80 .|. fromIntegral (lowerCp .&. 0x3f)) state
+      | otherwise = follow4CodeUnits offset remaining acc (0xf0 .|. fromIntegral (lowerCp `shiftR` 18)) (0x80 .|. fromIntegral (lowerCp `shiftR` 12)) (0x80 .|. fromIntegral ((lowerCp `shiftR` 6) .&. 0x3f)) (0x80 .|. fromIntegral (lowerCp .&. 0x3f)) state
+      where
+        !lowerCp = Char.ord $ Char.toLower $ Char.chr cp
+
+    -- | Follows 1-4 code units packed into a Word32.
+    {-# INLINE followCodeUnits #-}
+    followCodeUnits :: Int -> Int -> a -> Word32 -> State -> a
+    followCodeUnits !offset !remaining !acc !cus !state =
+      followEdge offset remaining acc cu0 cus' state
+      where
+        cu0 = fromIntegral $ cus .&. 0xff
+        cus' = cus `shiftR` 8
 
     {-# INLINE followEdge #-}
-    followEdge :: Int -> Int -> a -> State -> CodeUnit -> a
-    followEdge !offset !remaining !acc !state !input =
-      let
-        !tssOffset = offsets `uAt` state
-      in
-        -- When we follow an edge, we look in the transition table and do a
-        -- linear scan over all transitions until we find the right one, or
-        -- until we hit the wildcard transition at the end. For 0 or 1 or 2
-        -- transitions that is fine, but the initial state often has more
-        -- transitions, so we have a dedicated lookup table for it, that takes
-        -- up a bit more space, but provides O(1) lookup of the next state. We
-        -- only do this for the first 128 code units (all of ascii).
-        if state == stateInitial && input < asciiCount
-          then lookupRootAsciiTransition offset remaining acc input
-          else lookupTransition offset remaining acc state input tssOffset
+    followEdge :: Int -> Int -> a -> CodeUnit -> Word32 -> State -> a
+    followEdge !offset !remaining !acc !cu !cus !state =
+      lookupTransition offset remaining acc cu cus state $ offsets `uAt` state
+
+    -- NOTE: there is no `state` argument here, because this case applies only
+    -- to the root state `stateInitial`.
+    {-# INLINE lookupRootAsciiTransition #-}
+    lookupRootAsciiTransition !offset !remaining !acc !cu
+      -- Given code unit does not match at root ==> Repeat at offset from initial state
+      | transitionIsWildcard t = consumeInput offset remaining acc initialState
+      -- Transition matched!
+      | otherwise = collectMatches offset remaining acc $ transitionState t
+      where !t = rootAsciiTransitions `uAt` fromIntegral cu
+
+    -- NOTE: This function can't be inlined since it is self-recursive.
+    {-# NOINLINE lookupTransition #-}
+    lookupTransition :: Int -> Int -> a -> CodeUnit -> Word32 -> State -> Int -> a
+    lookupTransition !offset !remaining !acc !cu !cus !state !i
+      -- There is no transition for the given input. Follow the fallback edge,
+      -- and try again from that state, etc. If we are in the base state
+      -- already, then nothing matched, so move on to the next input.
+      | transitionIsWildcard t =
+        if state == initialState
+          then consumeInput offset remaining acc state
+          else followEdge offset remaining acc cu cus (transitionState t)
+      -- We found the transition, switch to that new state, possibly matching the rest of cus.
+      -- NOTE: This comes after wildcard checking, because the code unit of
+      -- the wildcard transition is 0, which is a valid input.
+      | transitionCodeUnit t == cu =
+        if cus == 0
+          then collectMatches offset remaining acc (transitionState t)
+          else followCodeUnits offset remaining acc cus (transitionState t)
+      -- The transition we inspected is not for the current input, and it is not
+      -- a wildcard either; look at the next transition then.
+      | otherwise =
+        lookupTransition offset remaining acc cu cus state $ i + 1
+
+      where
+        !t = transitions `uAt` i
+
+    -- TODO: In this case, we could avoid the loop in loookupTransition completely and just follow a single edge.
+    -- Should be worth investigating but could lead to some code duplication.
+    {-# INLINE followCodeUnit #-}
+    followCodeUnit :: Int -> Int -> a -> CodeUnit -> State -> a
+    followCodeUnit !offset !remaining !acc !cu0 !state =
+      followEdge offset remaining acc (fromIntegral cu0) 0 state
+
+    {-# INLINE follow2CodeUnits #-}
+    follow2CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> State -> a
+    follow2CodeUnits !offset !remaining !acc !cu0 !cu1 !state =
+      followCodeUnits offset remaining acc (fromIntegral cu0 .|. fromIntegral cu1 `shiftL` 8) state
+
+    {-# INLINE follow3CodeUnits #-}
+    follow3CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> CodeUnit -> State -> a
+    follow3CodeUnits !offset !remaining !acc !cu0 !cu1 !cu2 !state =
+      followCodeUnits offset remaining acc (fromIntegral cu0 .|. fromIntegral cu1 `shiftL` 8 .|. fromIntegral cu2 `shiftL` 16) state
+
+    {-# INLINE follow4CodeUnits #-}
+    follow4CodeUnits :: Int -> Int -> a -> CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> State -> a
+    follow4CodeUnits !offset !remaining !acc !cu0 !cu1 !cu2 !cu3 !state =
+      followCodeUnits offset remaining acc (fromIntegral cu0 .|. fromIntegral cu1 `shiftL` 8 .|. fromIntegral cu2 `shiftL` 16 .|. fromIntegral cu3 `shiftL` 24) state
 
     {-# NOINLINE collectMatches #-}
-    collectMatches :: Int -> Int -> a -> State -> a
     collectMatches !offset !remaining !acc !state =
       let
         matchedValues = values `at` state
@@ -443,47 +590,26 @@ runWithCase () seed f machine (Text !u8data !initialOffset !initialRemaining) =
         handleMatch !acc' vs = case vs of
           []     -> consumeInput offset remaining acc' state
           v:more -> case f acc' (Match (CodeUnitIndex $ offset - initialOffset) v) of
-            Step newAcc   -> handleMatch newAcc more
+            Step newAcc -> handleMatch newAcc more
             Done finalAcc -> finalAcc
       in
         handleMatch acc matchedValues
-
-    -- NOTE: there is no `state` argument here, because this case applies only
-    -- to the root state `stateInitial`.
-    {-# INLINE lookupRootAsciiTransition #-}
-    lookupRootAsciiTransition :: Int -> Int -> a -> CodeUnit -> a
-    lookupRootAsciiTransition !offset !remaining !acc !input =
-      case rootAsciiTransitions `uAt` fromIntegral input of
-        t | transitionIsWildcard t -> consumeInput offset remaining acc stateInitial
-          | otherwise -> collectMatches offset remaining acc (transitionState t)
-
-    {-# INLINE lookupTransition #-}
-    lookupTransition :: Int -> Int -> a -> State -> CodeUnit -> Int -> a
-    lookupTransition !offset !remaining !acc !state !input !i =
-      case transitions `uAt` i of
-        -- There is no transition for the given input. Follow the fallback edge,
-        -- and try again from that state, etc. If we are in the base state
-        -- already, then nothing matched, so move on to the next input.
-        t | transitionIsWildcard t ->
-              if state == stateInitial
-                then consumeInput offset remaining acc state
-                else followEdge offset remaining acc (transitionState t) input
-
-        -- We found the transition, switch to that new state, collecting matches.
-        -- NOTE: This comes after wildcard checking, because the code unit of
-        -- the wildcard transition is 0, which is a valid input.
-        t | transitionCodeUnit t == input ->
-              collectMatches offset remaining acc (transitionState t)
-
-        -- The transition we inspected is not for the current input, and it is not
-        -- a wildcard either; look at the next transition then.
-        _ -> lookupTransition offset remaining acc state input (i + 1)
-  in
-    consumeInput initialOffset initialRemaining seed stateInitial
 
 -- NOTE: To get full advantage of inlining this function, you probably want to
 -- compile the compiling module with -fllvm and the same optimization flags as
 -- this module.
 {-# INLINE runText #-}
 runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
-runText = runWithCase ()
+runText = runWithCase CaseSensitive
+
+-- Finds all matches in the lowercased text. This function lowercases the input text
+-- on the fly to avoid allocating a second lowercased text array.  It is still the
+-- responsibility of  the caller to lowercase the needles. Needles that contain
+-- uppercase code  points will not match.
+--
+-- NOTE: To get full advantage of inlining this function, you probably want to
+-- compile the compiling module with -fllvm and the same optimization flags as
+-- this module.
+{-# INLINE runLower #-}
+runLower :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
+runLower = runWithCase IgnoreCase

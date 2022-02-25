@@ -4,18 +4,37 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
 
-module Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text(..), unpackUtf8, stringToByteArray, indexTextArray, unicode2utf8, pack) where
+module Data.Text.Utf8
+    ( CodeUnit
+    , CodeUnitIndex (..)
+    , Data.Text.Utf8.readFile
+    , Text (..)
+    , decode2
+    , decode3
+    , decode4
+    , indexTextArray
+    , pack
+    , stringToByteArray
+    , toLowerAscii
+    , unicode2utf8
+    , unpackUtf8
+    ) where
 
-import Data.Bits (Bits, shiftR, (.&.), (.|.))
-import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, indexByteArray,
-                                 sizeofByteArray)
-import Data.Word (Word8)
-
+import Data.Bits (Bits (shiftL), shiftR, (.&.), (.|.))
 import Data.Char (ord)
+import Data.Foldable (for_)
+import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, indexByteArray,
+                                 newByteArray, sizeofByteArray, unsafeFreezeByteArray,
+                                 writeByteArray)
+import Data.Word (Word8)
 import GHC.Base (Int (I#), compareByteArrays#)
 import Prelude hiding (length)
+
+import qualified Data.ByteString as BS
+import qualified Data.Char as Char
 
 type CodeUnit = Word8
 
@@ -35,7 +54,7 @@ instance Eq Text where
 
 newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int
-    }
+    } deriving Show
 
 {-# INLINABLE unpackUtf8 #-}
 unpackUtf8 :: Text -> [CodeUnit]
@@ -54,7 +73,7 @@ indexTextArray = indexByteArray
 pack :: String -> Text
 pack = go . stringToByteArray
   where
-    go arr = Text arr 0 $ sizeofByteArray arr
+    go !arr = Text arr 0 $ sizeofByteArray arr
 
 stringToByteArray :: String -> ByteArray
 stringToByteArray = byteArrayFromList . concatMap char2utf8
@@ -70,3 +89,59 @@ unicode2utf8 c
     | c < 0x800   = [0xc0 .|. (c `shiftR` 6), 0x80 .|. (0x3f .&. c)]
     | c < 0x10000 = [0xe0 .|. (c `shiftR` 12), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
     | otherwise   = [0xf0 .|. (c `shiftR` 18), 0x80 .|. (0x3f .&. (c `shiftR` 12)), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
+
+readFile :: FilePath -> IO Text
+readFile path = do
+  contents <- BS.readFile path
+  array <- newByteArray $ BS.length contents
+  for_ [0..BS.length contents - 1] $ \i -> do
+    writeByteArray array i $ BS.index contents i
+  array' <- unsafeFreezeByteArray array
+  pure $ Text array' 0 $ BS.length contents
+
+
+-- | Decode 2 UTF-8 code units into their code point.
+-- The given code units should have the following format: ->
+--
+-- @
+-- ┌───────────────┬───────────────┐
+-- │1 1 0 x x x x x│1 0 x x x x x x│
+-- └───────────────┴───────────────┘
+-- @
+{-# INLINE decode2 #-}
+decode2 :: CodeUnit -> CodeUnit -> Int
+decode2 cu0 cu1 =
+  (fromIntegral cu0 .&. 0x1f) `shiftL` 6 .|. fromIntegral cu1 .&. 0x3f
+
+-- | Decode 3 UTF-8 code units into their code point.
+-- The given code units should have the following format:
+--
+-- @
+-- ┌───────────────┬───────────────┬───────────────┐
+-- │1 1 1 0 x x x x│1 0 x x x x x x│1 0 x x x x x x│
+-- └───────────────┴───────────────┴───────────────┘
+-- @
+{-# INLINE decode3 #-}
+decode3 :: CodeUnit -> CodeUnit -> CodeUnit -> Int
+decode3 cu0 cu1 cu2 =
+  (fromIntegral cu0 .&. 0xf) `shiftL` 12 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu2 .&. 0x3f)
+
+-- | Decode 4 UTF-8 code units into their code point.
+-- The given code units should have the following format:
+--
+-- @
+-- ┌───────────────┬───────────────┬───────────────┬───────────────┐
+-- │1 1 1 1 0 x x x│1 0 x x x x x x│1 0 x x x x x x│1 0 x x x x x x│
+-- └───────────────┴───────────────┴───────────────┴───────────────┘
+-- @
+{-# INLINE decode4 #-}
+decode4 :: CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> Int
+decode4 cu0 cu1 cu2 cu3 =
+  (fromIntegral cu0 .&. 0x7) `shiftL` 18 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 12 .|. (fromIntegral cu2 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu3 .&. 0x3f)
+
+-- | Lower-case the ASCII code points A-Z and leave the rest of ASCII intact.
+{-# INLINE toLowerAscii #-}
+toLowerAscii :: (Ord p, Num p) => p -> p
+toLowerAscii cu
+  | cu >= fromIntegral (Char.ord 'A') && cu <= fromIntegral (Char.ord 'Z') = cu + 0x20
+  | otherwise = cu

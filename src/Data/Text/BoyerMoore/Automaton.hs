@@ -22,19 +22,16 @@
 -- The algorithm here can be potentially improved by including the Galil rule
 -- (https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string-search_algorithm#The_Galil_rule)
 module Data.Text.BoyerMoore.Automaton
-  (
-    Automaton
-  , CaseSensitivity (..)
-  , buildAutomaton
-  , runText
-  , runLower
-  , patternLength
-  , patternText
-
-  , CodeUnitIndex (..)
-  , Next (..)
-  )
-  where
+    ( Automaton
+    , CaseSensitivity (..)
+    , CodeUnitIndex (..)
+    , Next (..)
+    , buildAutomaton
+    , patternLength
+    , patternText
+    , runLower
+    , runText
+    ) where
 
 import Prelude hiding (length)
 
@@ -52,7 +49,8 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Vector.Unboxed as UVector
 import qualified Data.Vector.Unboxed.Mutable as UMVector
 
-import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..), Next (..))
+import Data.Text.AhoCorasick.Automaton (Next (..))
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), lengthUtf16, lowerCodeUnit, unsafeIndexUtf16)
 
 -- | A Boyer-Moore automaton is based on lookup-tables that allow skipping through the haystack.

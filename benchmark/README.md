@@ -22,13 +22,13 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor i
 
 The first part of this file defines the search terms (the "needles") `Lorem`, `sunt` and `officia`.
 The second part, after a blank line, defines the corpus to search in  (the "haystack").
-Currently, these files **must be encoded as UTF-16**.
+Currently, these files **must be encoded as UTF-16 Little-Endian without BOM**.
 
 Each run of `benchmark.py` generates a pair for `.results` and `.stats` files.
 
 ### Python
 
-Run the benchmark in this directory
+Run the benchmark in this directory:
 
 ```
 ./benchmark.py ./naive.py --prefix python
@@ -78,7 +78,7 @@ Run the benchmark using the compiled binary:
 
 ### Haskell, UTF-8 Version
 
-In `text-2.0` and above, the `Text` type with use UTF-8 under the hood.
+In `text-2.0` and above, the `Text` type will use UTF-8 under the hood.
 The `haskell-utf8` directory contains a preliminary benchmark for `alfred-margaret` using UTF-8 byte arrays.
 To compile it, run Stack in the `haskell-utf8` directory:
 
@@ -89,7 +89,15 @@ stack build
 Run the benchmark using the compiled binary:
 
 ```
-./benchmark.py haskell-utf8/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix haskell-utf8
+./benchmark.py haskell-utf8/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix haskell-utf8 --data-directory data-utf8
+```
+
+Note that you must first convert the data files for the benchmark into UTF-8 and put them in `data-utf8`.
+You can use `iconv` for this:
+
+```
+mkdir data-utf8
+for f in $(ls data); do echo $f; iconv -f UTF-16LE -t UTF-8 data/$f -o data-utf8/$f; done
 ```
 
 ## Inspecting the Results
