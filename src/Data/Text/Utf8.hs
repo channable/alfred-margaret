@@ -24,17 +24,17 @@ module Data.Text.Utf8
     ) where
 
 import Data.Bits (Bits (shiftL), shiftR, (.&.), (.|.))
+import Data.Char (ord)
+import Data.Foldable (for_)
 import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, indexByteArray,
                                  newByteArray, sizeofByteArray, unsafeFreezeByteArray,
                                  writeByteArray)
 import Data.Word (Word8)
-
-import qualified Data.ByteString as BS
-import Data.Char (ord)
-import qualified Data.Char as Char
-import Data.Foldable (for_)
 import GHC.Base (Int (I#), compareByteArrays#)
 import Prelude hiding (length)
+
+import qualified Data.ByteString as BS
+import qualified Data.Char as Char
 
 type CodeUnit = Word8
 
