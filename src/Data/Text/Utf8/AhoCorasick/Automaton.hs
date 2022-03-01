@@ -44,17 +44,17 @@ import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
 import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import qualified Data.Vector as Vector
-import qualified Data.Vector.Unboxed as UVector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
 
+import Data.Primitive (ByteArray, Prim, byteArrayFromList, indexByteArray)
 import qualified Data.Text.Utf8 as Utf8
 
 -- TYPES
@@ -62,10 +62,7 @@ import qualified Data.Text.Utf8 as Utf8
 type State = Int
 
 -- | A transition is a pair of (code point, next state). The code point is 21 bits,
--- and the state index is 32 bits. We pack these together as a manually unlifted
--- tuple, because an unboxed Vector of tuples is a tuple of vectors, but we want
--- the elements of the tuple to be adjacent in memory. (The Word64 still needs
--- to be unpacked in the places where it is used.) The code point is stored in
+-- and the state index is 32 bits. The code point is stored in
 -- the least significant 32 bits, with the special value 2^21 indicating a
 -- wildcard; the "failure" transition. Bits 22 through 31 (starting from zero,
 -- both bounds inclusive) are always 0.
@@ -85,6 +82,9 @@ type State = Int
 -- construct and read transitions.
 type Transition = Word64
 
+-- TODO: Perhaps a word16 would be enough
+type Offset = Word32
+
 data Match v = Match
   { matchPos   :: {-# UNPACK #-} !CodeUnitIndex
   -- ^ The code unit index past the last code unit of the match. Note that this
@@ -94,19 +94,24 @@ data Match v = Match
   -- ^ The payload associated with the matched needle.
   }
 
+newtype TypedByteArray a = TypedByteArray ByteArray
+
+typedByteArrayFromList :: Prim a => [a] -> TypedByteArray a
+typedByteArrayFromList = TypedByteArray . byteArrayFromList
+
 -- | An Aho-Corasick automaton.
 data AcMachine v = AcMachine
   { machineValues               :: !(Vector.Vector [v])
   -- ^ For every state, the values associated with its needles. If the state is
   -- not a match state, the list is empty.
-  , machineTransitions          :: !(UVector.Vector Transition)
+  , machineTransitions          :: !(TypedByteArray Transition)
   -- ^ A packed vector of transitions. For every state, there is a slice of this
   -- vector that starts at the offset given by `machineOffsets`, and ends at the
   -- first wildcard transition.
-  , machineOffsets              :: !(UVector.Vector Int)
+  , machineOffsets              :: !(TypedByteArray Offset)
   -- ^ For every state, the index into `machineTransitions` where the transition
   -- list for that state starts.
-  , machineRootAsciiTransitions :: !(UVector.Vector Transition)
+  , machineRootAsciiTransitions :: !(TypedByteArray Transition)
   -- ^ A lookup table for transitions from the root state, an optimization to
   -- avoid having to walk all transitions, at the cost of using a bit of
   -- additional memory.
@@ -153,11 +158,11 @@ newWildcardTransition state =
 -- the transitions for a specific state, we also produce a vector of start
 -- indices. All transition lists are terminated by a wildcard transition, so
 -- there is no need to record the length.
-packTransitions :: [[Transition]] -> (UVector.Vector Transition, UVector.Vector Int)
+packTransitions :: [[Transition]] -> (TypedByteArray Transition, TypedByteArray Offset)
 packTransitions transitions =
   let
-    packed = UVector.fromList $ concat transitions
-    offsets = UVector.fromList $ scanl (+) 0 $ fmap List.length transitions
+    packed = typedByteArrayFromList $ concat transitions
+    offsets = typedByteArrayFromList $ map fromIntegral $ scanl (+) 0 $ fmap List.length transitions
   in
     (packed, offsets)
 
@@ -302,11 +307,11 @@ asciiCount = 128
 -- | Build a lookup table for the first 128 code points, that can be used for
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
-buildAsciiTransitionLookupTable :: IntMap State -> UVector.Vector Transition
-buildAsciiTransitionLookupTable transitions = UVector.generate asciiCount $ \i ->
+buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
+buildAsciiTransitionLookupTable transitions = typedByteArrayFromList $ map (\i ->
   case IntMap.lookup i transitions of
     Just state -> newTransition (fromIntegral i) state
-    Nothing    -> newWildcardTransition 0
+    Nothing    -> newWildcardTransition 0) [0..asciiCount - 1]
 
 -- | Traverse the state trie in breadth-first order.
 foldBreadthFirst :: (a -> State -> a) -> a -> TransitionMap -> a
@@ -391,10 +396,10 @@ at :: forall a. Vector.Vector a -> Int -> a
 at = Vector.unsafeIndex
 
 {-# INLINE uAt #-}
-{-# SPECIALIZE INLINE uAt :: UVector.Vector Int -> Int -> Int  #-}
-{-# SPECIALIZE INLINE uAt :: UVector.Vector Transition -> Int -> Transition  #-}
-uAt :: forall a. UVector.Unbox a => UVector.Vector a -> Int -> a
-uAt = UVector.unsafeIndex
+{-# SPECIALIZE INLINE uAt :: TypedByteArray Offset -> Int -> Offset  #-}
+{-# SPECIALIZE INLINE uAt :: TypedByteArray Transition -> Int -> Transition  #-}
+uAt :: Prim a => TypedByteArray a -> Int -> a
+uAt (TypedByteArray arr) = indexByteArray arr
 
 -- RUNNING THE MACHINE
 
@@ -444,7 +449,7 @@ data Next a = Done !a | Step !a
 {-# INLINE runWithCase #-}
 runWithCase :: forall a v. CaseSensitivity -> a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runWithCase !caseSensitivity !seed !f !machine !text =
-  consumeInput initialOffset initialRemaining seed initialState
+  {-# SCC "runWithCase" #-} consumeInput initialOffset initialRemaining seed initialState
   where
     initialState = 0
 
@@ -468,7 +473,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     consumeInput :: Int -> Int -> a -> State -> a
     consumeInput _offset 0 acc _state = acc
     consumeInput !offset !remaining !acc !state =
-      followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
+      {-# SCC "consumeInput" #-} followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
 
       where
         !cu = indexTextArray u8data offset
@@ -492,7 +497,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
 
     -- NOTE: This function can't be inlined since it is self-recursive.
     {-# NOINLINE lookupTransition #-}
-    lookupTransition :: Int -> Int -> a -> CodePoint -> State -> Int -> a
+    lookupTransition :: Int -> Int -> a -> CodePoint -> State -> Offset -> a
     lookupTransition !offset !remaining !acc !cp !state !i
       -- There is no transition for the given input. Follow the fallback edge,
       -- and try again from that state, etc. If we are in the base state
@@ -512,7 +517,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
         lookupTransition offset remaining acc cp state $ i + 1
 
       where
-        !t = transitions `uAt` i
+        !t = transitions `uAt` fromIntegral i
 
     -- NOTE: there is no `state` argument here, because this case applies only
     -- to the root state `stateInitial`.
@@ -536,7 +541,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
             Step newAcc -> handleMatch newAcc more
             Done finalAcc -> finalAcc
       in
-        handleMatch acc matchedValues
+        {-# SCC "collectMatches" #-} handleMatch acc matchedValues
 
 -- NOTE: To get full advantage of inlining this function, you probably want to
 -- compile the compiling module with -fllvm and the same optimization flags as
