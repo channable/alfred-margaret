@@ -449,7 +449,7 @@ data Next a = Done !a | Step !a
 {-# INLINE runWithCase #-}
 runWithCase :: forall a v. CaseSensitivity -> a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runWithCase !caseSensitivity !seed !f !machine !text =
-  {-# SCC "runWithCase" #-} consumeInput initialOffset initialRemaining seed initialState
+  consumeInput initialOffset initialRemaining seed initialState
   where
     initialState = 0
 
@@ -473,7 +473,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     consumeInput :: Int -> Int -> a -> State -> a
     consumeInput _offset 0 acc _state = acc
     consumeInput !offset !remaining !acc !state =
-      {-# SCC "consumeInput" #-} followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
+      followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
 
       where
         !cu = indexTextArray u8data offset
@@ -541,7 +541,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
             Step newAcc -> handleMatch newAcc more
             Done finalAcc -> finalAcc
       in
-        {-# SCC "collectMatches" #-} handleMatch acc matchedValues
+        handleMatch acc matchedValues
 
 -- NOTE: To get full advantage of inlining this function, you probably want to
 -- compile the compiling module with -fllvm and the same optimization flags as
