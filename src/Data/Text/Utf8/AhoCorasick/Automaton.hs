@@ -44,7 +44,7 @@ import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
 import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
-import Data.Word (Word32, Word64)
+import Data.Word (Word64)
 
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
@@ -61,20 +61,20 @@ import qualified Data.Text.Utf8 as Utf8
 -- | A numbered state in the Aho-Corasick automaton.
 type State = Int
 
--- | A transition is a pair of (code unit, next state). The code unit is 8 bits,
+-- | A transition is a pair of (code point, next state). The code point is 21 bits,
 -- and the state index is 32 bits. We pack these together as a manually unlifted
 -- tuple, because an unboxed Vector of tuples is a tuple of vectors, but we want
 -- the elements of the tuple to be adjacent in memory. (The Word64 still needs
--- to be unpacked in the places where it is used.) The code unit is stored in
--- the least significant 32 bits, with the special value 2^8 indicating a
--- wildcard; the "failure" transition. Bit 9 through 31 (starting from zero,
+-- to be unpacked in the places where it is used.) The code point is stored in
+-- the least significant 32 bits, with the special value 2^21 indicating a
+-- wildcard; the "failure" transition. Bits 22 through 31 (starting from zero,
 -- both bounds inclusive) are always 0.
 --
 --
 -- >  Bit 63 (most significant)                 Bit 0 (least significant)
 -- >  |                                                                 |
 -- >  v                                                                 v
--- > |<--       goto state         -->|<--    -->| |<--     input     -->|
+-- > |<--       goto state         -->|<-- 0s -->| |<--     input     -->|
 -- > |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|0000000000|W|IIIIIIIIIIIIIIIIIIIII|
 -- >                                              |
 -- >                                        Wildcard bit (bit 21)
@@ -89,7 +89,7 @@ data Match v = Match
   { matchPos   :: {-# UNPACK #-} !CodeUnitIndex
   -- ^ The code unit index past the last code unit of the match. Note that this
   -- is not a code *point* (Haskell `Char`) index; a code point might be encoded
-  -- as two code units.
+  -- as up to four code units.
   , matchValue :: v
   -- ^ The payload associated with the matched needle.
   }
@@ -162,9 +162,7 @@ packTransitions transitions =
     (packed, offsets)
 
 -- | Construct an Aho-Corasick automaton for the given needles.
--- The automaton uses UTF-8 code units (bytes) to match the input.
--- This means that running it is a bit tricky if you want to ignore case,
--- since changing a code point's case may increase or decrease its number of code units.
+-- The automaton uses Unicode code points to match the input.
 build :: [([CodeUnit], v)] -> AcMachine v
 build needlesWithValues =
   let
@@ -213,10 +211,6 @@ debugBuildDot needles =
 
     showInput input = [chr input]
 
-    asHexByte input =
-      [hexChars List.!! div input 16, hexChars List.!! mod input 16]
-      where hexChars = ['0'..'9'] ++ ['a'..'f']
-
     prependTransitionEdges edges state =
       IntMap.foldlWithKey' (dotTransitionEdge state) edges (transitionMap IntMap.! state)
 
@@ -245,14 +239,14 @@ type ValuesMap v = IntMap [v]
 buildTransitionMap :: forall v. [([CodeUnit], v)] -> (Int, TransitionMap, ValuesMap v)
 buildTransitionMap needles = buildTransitionMap' [(decodeUtf8 cus, val) | (cus, val) <- needles]
 
--- | Decode a list of UTF-8 code units in a list of code points.
+-- | Decode a list of UTF-8 code units into a list of code points.
 decodeUtf8 :: [CodeUnit] -> [CodePoint]
 decodeUtf8 [] = []
 decodeUtf8 (cu0 : cus) | cu0 < 0xc0 = fromIntegral cu0 : decodeUtf8 cus
 decodeUtf8 (cu0 : cu1 : cus) | cu0 < 0xe0 = Utf8.decode2 cu0 cu1 : decodeUtf8 cus
 decodeUtf8 (cu0 : cu1 : cu2 : cus) | cu0 < 0xf0 = Utf8.decode3 cu0 cu1 cu2 : decodeUtf8 cus
 decodeUtf8 (cu0 : cu1 : cu2 : cu3 : cus) = Utf8.decode4 cu0 cu1 cu2 cu3 : decodeUtf8 cus
-decodeUtf8 _ = undefined
+decodeUtf8 cus = error $ "Invalid UTF-8 input sequence at " ++ show (take 4 cus)
 
 buildTransitionMap' :: forall v. [([CodePoint], v)] -> (Int, TransitionMap, ValuesMap v)
 buildTransitionMap' =
@@ -305,7 +299,7 @@ buildTransitionMap' =
 asciiCount :: Integral a => a
 asciiCount = 128
 
--- | Build a lookup table for the first 128 code units, that can be used for
+-- | Build a lookup table for the first 128 code points, that can be used for
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
 buildAsciiTransitionLookupTable :: IntMap State -> UVector.Vector Transition
@@ -418,36 +412,30 @@ data Next a = Done !a | Step !a
 -- This means that they can be compiled to jumps instead of function calls, which helps performance a lot.
 --
 -- @
--- ┌────────────┐   ┌────────────────┐
--- │consumeInput├───►followCodeUnits │
--- └─▲──────────┘   └─▲────────────┬─┘
---   │                │            │
---   │              ┌─┴────────────▼─┐   ┌──────────────┐
---   │              │lookupTransition├───►collectMatches│
---   │              └────▲──────┬────┘   └────────────┬─┘
---   │                   │      │                     │
---   │                   └──────┘                     │
+--   ┌─────────────────────────────┐
+--   │                             │
+-- ┌─▼──────────┐   ┌──────────────┴─┐   ┌──────────────┐
+-- │consumeInput├───►lookupTransition├───►collectMatches│
+-- └─▲──────────┘   └─▲────────────┬─┘   └────────────┬─┘
+--   │                │            │                  │
+--   │                └────────────┘                  │
 --   │                                                │
 --   └────────────────────────────────────────────────┘
 -- @
 --
--- * @consumeInput@ inspects the next code unit in the input and decides what to do with it.
---   If necessary, it decodes a code point of up to four code units and passes them to @followCodeUnits@.
--- * @followCodeUnits@ pops an entry from the code unit queue and passes it to @lookupTransition@.
--- * @lookupTransition@ checks whether the given code unit matches any transitions at the given state.
---   If so, it follows the transition and then loops back to @followCodeUnits@ if the code unit queue
---   is not empty and otherwise calls @collectMatches@.
+-- * @consumeInput@ decodes a code point of up to four code units and possibly lowercases it.
+--   It passes this code point to @followCodePoint@, which in turn calls @lookupTransition@.
+-- * @lookupTransition@ checks whether the given code point matches any transitions at the given state.
+--   If so, it follows the transition and calls @collectMatches@. Otherwise, it follows the fallback transition
+--   and calls @followCodePoint@ or @consumeInput@.
 -- * @collectMatches@ checks whether the current state is accepting and updates the accumulator accordingly.
 --   Afterwards it loops back to @consumeInput@.
 --
--- NOTE: @followCodeUnits@ is actually inlined into @consumeInput@ and @lookupTransition@ by GHC.
+-- NOTE: @followCodePoint@ is actually inlined into @consumeInput@ by GHC.
 -- It is included in the diagram for illustrative reasons only.
 --
 -- All of these functions have the arguments @offset@, @remaining@ and @acc@ which encode the current input
 -- position and the accumulator, which contains the matches.
--- Functions in the loop including @followCodeUnits@ and @lookupTransition@ also contain arguments for the
--- code unit queue. Currently, the code unit queue is implemented as a single `Word32` argument which
--- contains 0-4 packed code units.
 --
 -- WARNING: Run benchmarks when modifying this function; its performance is
 -- fragile. It took many days to discover the current formulation which compiles
@@ -476,8 +464,6 @@ runWithCase !caseSensitivity !seed !f !machine !text =
 
     -- | Consume a code unit sequence that constitutes a full code point.
     -- If the code unit at @offset@ is ASCII, we can lower it using 'Utf8.toLowerAscii'.
-    -- Otherwise we have to assume that lowercasing it will change the length of the code unit sequence.
-    -- Therefore we have to invoke @followCodeUnits@, which keeps a queue of code units and looks up their transitions one after the other.
     {-# NOINLINE consumeInput #-}
     consumeInput :: Int -> Int -> a -> State -> a
     consumeInput _offset 0 acc _state = acc
@@ -502,12 +488,12 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     followCodePoint :: Int -> Int -> a -> CodePoint -> State -> a
     followCodePoint !offset !remaining !acc !cp !state
       | state == initialState && cp < asciiCount = lookupRootAsciiTransition offset remaining acc cp
-      | otherwise = lookupTransition' offset remaining acc cp state $ offsets `uAt` state
+      | otherwise = lookupTransition offset remaining acc cp state $ offsets `uAt` state
 
     -- NOTE: This function can't be inlined since it is self-recursive.
-    {-# NOINLINE lookupTransition' #-}
-    lookupTransition' :: Int -> Int -> a -> CodePoint -> State -> Int -> a
-    lookupTransition' !offset !remaining !acc !cp !state !i
+    {-# NOINLINE lookupTransition #-}
+    lookupTransition :: Int -> Int -> a -> CodePoint -> State -> Int -> a
+    lookupTransition !offset !remaining !acc !cp !state !i
       -- There is no transition for the given input. Follow the fallback edge,
       -- and try again from that state, etc. If we are in the base state
       -- already, then nothing matched, so move on to the next input.
@@ -523,7 +509,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       -- The transition we inspected is not for the current input, and it is not
       -- a wildcard either; look at the next transition then.
       | otherwise =
-        lookupTransition' offset remaining acc cp state $ i + 1
+        lookupTransition offset remaining acc cp state $ i + 1
 
       where
         !t = transitions `uAt` i
