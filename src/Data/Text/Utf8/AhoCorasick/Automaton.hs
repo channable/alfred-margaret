@@ -471,7 +471,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     -- If the code unit at @offset@ is ASCII, we can lower it using 'Utf8.toLowerAscii'.
     {-# NOINLINE consumeInput #-}
     consumeInput :: Int -> Int -> a -> State -> a
-    consumeInput _offset 0 acc _state = acc
+    consumeInput !_offset 0 !acc !_state = acc
     consumeInput !offset !remaining !acc !state =
       followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
 
