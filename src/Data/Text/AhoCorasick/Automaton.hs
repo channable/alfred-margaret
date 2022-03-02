@@ -43,6 +43,7 @@ import Prelude hiding (length)
 import Control.DeepSeq (NFData)
 import Data.Bits (shiftL, shiftR, (.&.), (.|.))
 import Data.Foldable (foldl')
+import Data.Functor ((<&>))
 import Data.IntMap.Strict (IntMap)
 import Data.Text.Internal (Text (..))
 import Data.Word (Word64)
@@ -51,10 +52,12 @@ import GHC.Generics (Generic)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import qualified Data.Vector as Vector
-import qualified Data.Vector.Unboxed as UVector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), indexTextArray, lowerCodeUnit)
+import Data.TypedByteArray (Prim, TypedByteArray)
+
+import qualified Data.TypedByteArray as TBA
 
 -- | A numbered state in the Aho-Corasick automaton.
 type State = Int
@@ -92,14 +95,14 @@ data AcMachine v = AcMachine
   { machineValues :: !(Vector.Vector [v])
   -- ^ For every state, the values associated with its needles. If the state is
   -- not a match state, the list is empty.
-  , machineTransitions :: !(UVector.Vector Transition)
+  , machineTransitions :: !(TypedByteArray Transition)
   -- ^ A packed vector of transitions. For every state, there is a slice of this
   -- vector that starts at the offset given by `machineOffsets`, and ends at the
   -- first wildcard transition.
-  , machineOffsets :: !(UVector.Vector Int)
+  , machineOffsets :: !(TypedByteArray Int)
   -- ^ For every state, the index into `machineTransitions` where the transition
   -- list for that state starts.
-  , machineRootAsciiTransitions :: !(UVector.Vector Transition)
+  , machineRootAsciiTransitions :: !(TypedByteArray Transition)
   -- ^ A lookup table for transitions from the root state, an optimization to
   -- avoid having to walk all transitions, at the cost of using a bit of
   -- additional memory.
@@ -144,11 +147,11 @@ newWildcardTransition state =
 -- the transitions for a specific state, we also produce a vector of start
 -- indices. All transition lists are terminated by a wildcard transition, so
 -- there is no need to record the length.
-packTransitions :: [[Transition]] -> (UVector.Vector Transition, UVector.Vector Int)
+packTransitions :: [[Transition]] -> (TypedByteArray Transition, TypedByteArray Int)
 packTransitions transitions =
   let
-    packed = UVector.fromList $ concat transitions
-    offsets = UVector.fromList $ scanl (+) 0 $ fmap List.length transitions
+    packed = TBA.fromList $ concat transitions
+    offsets = TBA.fromList $ scanl (+) 0 $ fmap List.length transitions
   in
     (packed, offsets)
 
@@ -281,8 +284,8 @@ asciiCount = 128
 -- | Build a lookup table for the first 128 code units, that can be used for
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
-buildAsciiTransitionLookupTable :: IntMap State -> UVector.Vector Transition
-buildAsciiTransitionLookupTable transitions = UVector.generate asciiCount $ \i ->
+buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
+buildAsciiTransitionLookupTable transitions = TBA.fromList $ [0..asciiCount - 1] <&> \i ->
   case IntMap.lookup i transitions of
     Just state -> newTransition (fromIntegral i) state
     Nothing -> newWildcardTransition 0
@@ -368,8 +371,9 @@ buildValueMap transitions fallbacks valuesInitial =
 at :: forall a. Vector.Vector a -> Int -> a
 at = Vector.unsafeIndex
 
-uAt :: forall a. UVector.Unbox a => UVector.Vector a -> Int -> a
-uAt = UVector.unsafeIndex
+{-# INLINE uAt #-}
+uAt :: Prim a => TypedByteArray a -> Int -> a
+uAt = TBA.unsafeIndex
 
 -- | Result of handling a match: stepping the automaton can exit early by
 -- returning a `Done`, or it can continue with a new accumulator with `Step`.

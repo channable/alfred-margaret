@@ -43,18 +43,18 @@ module Data.Text.Utf8.AhoCorasick.Automaton
 import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
 import Data.Foldable (foldl')
+import Data.Functor ((<&>))
 import Data.IntMap.Strict (IntMap)
 import Data.Word (Word32, Word64)
 
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
-import Data.Primitive (Prim)
 import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
-import Data.TypedByteArray (TypedByteArray)
+import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.TypedByteArray as TBA
@@ -304,10 +304,10 @@ asciiCount = 128
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
 buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
-buildAsciiTransitionLookupTable transitions = TBA.fromList $ map (\i ->
+buildAsciiTransitionLookupTable transitions = TBA.fromList $ [0..asciiCount - 1] <&> \i ->
   case IntMap.lookup i transitions of
     Just state -> newTransition (fromIntegral i) state
-    Nothing    -> newWildcardTransition 0) [0..asciiCount - 1]
+    Nothing    -> newWildcardTransition 0
 
 -- | Traverse the state trie in breadth-first order.
 foldBreadthFirst :: (a -> State -> a) -> a -> TransitionMap -> a
