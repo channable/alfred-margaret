@@ -439,8 +439,11 @@ data Next a = Done !a | Step !a
 -- NOTE: @followCodePoint@ is actually inlined into @consumeInput@ by GHC.
 -- It is included in the diagram for illustrative reasons only.
 --
--- All of these functions have the arguments @offset@, @remaining@ and @acc@ which encode the current input
--- position and the accumulator, which contains the matches.
+-- All of these functions have the arguments @offset@, @remaining@, @state@ and @acc@ which encode the current input
+-- position and the accumulator, which contains the matches. If you change any of the functions above,
+-- make sure to check the Core dumps afterwards that @offset@, @remaining@ and @state@ were turned
+-- into unboxed @Int#@ by GHC. If any of them aren't, the program will constantly allocate and deallocate heap space for them.
+-- You can nudge GHC in the right direction by using bang patterns on these arguments.
 --
 -- WARNING: Run benchmarks when modifying this function; its performance is
 -- fragile. It took many days to discover the current formulation which compiles
