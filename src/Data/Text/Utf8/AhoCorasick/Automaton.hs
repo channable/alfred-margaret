@@ -49,13 +49,15 @@ import Data.Word (Word32, Word64)
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
+import Data.Primitive (Prim)
 import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
+import Data.TypedByteArray (TypedByteArray)
 
-import Data.Primitive (ByteArray, Prim, byteArrayFromList, indexByteArray)
 import qualified Data.Text.Utf8 as Utf8
+import qualified Data.TypedByteArray as TBA
 
 -- TYPES
 -- | A numbered state in the Aho-Corasick automaton.
@@ -93,11 +95,6 @@ data Match v = Match
   , matchValue :: v
   -- ^ The payload associated with the matched needle.
   }
-
-newtype TypedByteArray a = TypedByteArray ByteArray
-
-typedByteArrayFromList :: Prim a => [a] -> TypedByteArray a
-typedByteArrayFromList = TypedByteArray . byteArrayFromList
 
 -- | An Aho-Corasick automaton.
 data AcMachine v = AcMachine
@@ -161,8 +158,8 @@ newWildcardTransition state =
 packTransitions :: [[Transition]] -> (TypedByteArray Transition, TypedByteArray Offset)
 packTransitions transitions =
   let
-    packed = typedByteArrayFromList $ concat transitions
-    offsets = typedByteArrayFromList $ map fromIntegral $ scanl (+) 0 $ fmap List.length transitions
+    packed = TBA.fromList $ concat transitions
+    offsets = TBA.fromList $ map fromIntegral $ scanl (+) 0 $ fmap List.length transitions
   in
     (packed, offsets)
 
@@ -308,7 +305,7 @@ asciiCount = 128
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
 buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
-buildAsciiTransitionLookupTable transitions = typedByteArrayFromList $ map (\i ->
+buildAsciiTransitionLookupTable transitions = TBA.fromList $ map (\i ->
   case IntMap.lookup i transitions of
     Just state -> newTransition (fromIntegral i) state
     Nothing    -> newWildcardTransition 0) [0..asciiCount - 1]
@@ -399,7 +396,7 @@ at = Vector.unsafeIndex
 {-# SPECIALIZE INLINE uAt :: TypedByteArray Offset -> Int -> Offset  #-}
 {-# SPECIALIZE INLINE uAt :: TypedByteArray Transition -> Int -> Transition  #-}
 uAt :: Prim a => TypedByteArray a -> Int -> a
-uAt (TypedByteArray arr) = indexByteArray arr
+uAt = TBA.unsafeIndex
 
 -- RUNNING THE MACHINE
 

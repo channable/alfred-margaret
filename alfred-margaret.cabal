@@ -50,6 +50,7 @@ library
                      , Data.Text.Utf16
                      , Data.Text.Utf8
                      , Data.Text.Utf8.AhoCorasick.Automaton
+                     , Data.TypedByteArray
   build-depends:
       base             >= 4.7 && < 5
     , containers       >= 0.6 && < 0.7
