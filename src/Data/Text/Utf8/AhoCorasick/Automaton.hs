@@ -43,7 +43,6 @@ module Data.Text.Utf8.AhoCorasick.Automaton
 import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
 import Data.Foldable (foldl')
-import Data.Functor ((<&>))
 import Data.IntMap.Strict (IntMap)
 import Data.Word (Word32, Word64)
 
@@ -304,7 +303,7 @@ asciiCount = 128
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
 buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
-buildAsciiTransitionLookupTable transitions = TBA.fromList $ [0..asciiCount - 1] <&> \i ->
+buildAsciiTransitionLookupTable transitions = TBA.generate asciiCount $ \i ->
   case IntMap.lookup i transitions of
     Just state -> newTransition (fromIntegral i) state
     Nothing    -> newWildcardTransition 0
