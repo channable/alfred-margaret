@@ -6,12 +6,17 @@
 
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash #-}
 
 module Data.Text.Utf8
     ( CodePoint
     , CodeUnit
     , CodeUnitIndex (..)
+    , Data.Text.Utf8.concat
+    , Data.Text.Utf8.null
     , Data.Text.Utf8.readFile
     , Text (..)
     , decode2
@@ -19,11 +24,14 @@ module Data.Text.Utf8
     , decode4
     , decodeUtf8
     , indexTextArray
+    , lengthUtf8
+    , lowerUtf8
     , pack
     , stringToByteArray
     , toLowerAscii
     , unicode2utf8
     , unpackUtf8
+    , unsafeCutUtf8
     ) where
 
 import Control.DeepSeq (NFData, rnf)
@@ -36,11 +44,13 @@ import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, index
                                  writeByteArray)
 import Data.Word (Word8)
 import GHC.Base (Int (I#), compareByteArrays#)
+import GHC.Generics (Generic)
 import Prelude hiding (length)
 #if defined(HAS_AESON)
 import Data.Aeson (FromJSON, ToJSON, Value (String), parseJSON, toJSON, withText)
 #endif
 
+import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
 import qualified Data.Text as T
@@ -73,6 +83,10 @@ instance FromJSON Text where
   parseJSON = withText "Data.Text.Utf8.Text" (pure . pack . T.unpack)
 #endif
 
+-- NOTE: This is ugly and slow but will be removed once we move to text-2.0.
+instance Ord Text where
+  x <= y = unpack x <= unpack y
+
 -- Copied from https://hackage.haskell.org/package/hashable-1.4.0.2/docs/src/Data.Hashable.Class.html#line-746
 instance Hashable Text where
   hashWithSalt salt (Text (ByteArray arr) off len) =
@@ -83,10 +97,24 @@ instance NFData Text where
 
 newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int
-    } deriving Show
+    }
+    deriving stock (Eq, Ord, Show, Generic, Bounded)
+#if defined(HAS_AESON)
+    deriving newtype (Hashable, Num, NFData, AE.FromJSON, AE.ToJSON)
+#else
+    deriving newtype (Hashable, Num, NFData)
+#endif
 
+-- TODO: Slow placeholder implementation until we can use text-2.0
 unpack :: Text -> String
 unpack = map Char.chr . decodeUtf8 . unpackUtf8
+
+-- TODO: Slow placeholder implementation until we can use text-2.0
+concat :: [Text] -> Text
+concat = pack . concatMap unpack
+
+null :: Text -> Bool
+null (Text _ _ len) = len == 0
 
 {-# INLINABLE unpackUtf8 #-}
 unpackUtf8 :: Text -> [CodeUnit]
@@ -96,6 +124,30 @@ unpackUtf8 (Text u8data offset length) =
     go i n = indexTextArray u8data i : go (i + 1) (n - 1)
   in
     go offset length
+
+lengthUtf8 :: Text -> CodeUnitIndex
+lengthUtf8 (Text _ _ !length) = CodeUnitIndex length
+
+-- TODO: Make this more readable once we have text-2.0.
+--
+-- >  off                 off+len
+-- >   │                     │
+-- >   ▼                     ▼
+-- > ──┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬──
+-- >  A│B│C│D│E│F│G│H│I│J│K│L│M│N
+-- > ──┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴──
+-- >       ▲           ▲
+-- >       │           │
+-- >  off+begin   off+begin+length
+--
+-- Visualizes:
+--
+-- > unsafeCutUtf8 2 6 "BCDEFGHIJKL" == ("BC", "JKL")
+unsafeCutUtf8 :: CodeUnitIndex -> CodeUnitIndex -> Text -> (Text, Text)
+unsafeCutUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) (Text !u8data !off !len) =
+  ( Text u8data off begin
+  , Text u8data (off + begin + length) (len - begin - length)
+  )
 
 -- | Decode a list of UTF-8 code units into a list of code points.
 decodeUtf8 :: [CodeUnit] -> [CodePoint]
@@ -110,7 +162,7 @@ decodeUtf8 cus = error $ "Invalid UTF-8 input sequence at " ++ show (take 4 cus)
 indexTextArray :: ByteArray -> Int -> CodeUnit
 indexTextArray = indexByteArray
 
--- | Warning: This is slow placeholder function meant to be used for debugging.
+-- TODO: Slow placeholder implementation until we can use text-2.0
 pack :: String -> Text
 pack = go . stringToByteArray
   where
@@ -183,6 +235,11 @@ decode4 cu0 cu1 cu2 cu3 =
 -- | Lower-case the ASCII code points A-Z and leave the rest of ASCII intact.
 {-# INLINE toLowerAscii #-}
 toLowerAscii :: (Ord p, Num p) => p -> p
-toLowerAscii cu
-  | cu >= fromIntegral (Char.ord 'A') && cu <= fromIntegral (Char.ord 'Z') = cu + 0x20
-  | otherwise = cu
+toLowerAscii cp
+  | cp >= fromIntegral (Char.ord 'A') && cp <= fromIntegral (Char.ord 'Z') = cp + 0x20
+  | otherwise = cp
+
+-- TODO: Slow placeholder implementation until we can use text-2.0
+{-# INLINE lowerUtf8 #-}
+lowerUtf8 :: Text -> Text
+lowerUtf8 = pack . map Char.toLower . unpack
