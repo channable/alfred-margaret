@@ -5,6 +5,7 @@
 -- repository root.
 
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | An efficient implementation of the Aho-Corasick string matching algorithm.
@@ -40,11 +41,13 @@ module Data.Text.Utf8.AhoCorasick.Automaton
     , runWithCase
     ) where
 
+import Control.DeepSeq (NFData)
 import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
 import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
 import Data.Word (Word32, Word64)
+import GHC.Generics (Generic)
 
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
@@ -53,7 +56,8 @@ import Data.Primitive (Prim)
 import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
+import Data.Text.Utf8 (CodePoint, CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..),
+                       indexTextArray)
 import Data.TypedByteArray (TypedByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
@@ -111,9 +115,9 @@ data AcMachine v = AcMachine
   -- ^ A lookup table for transitions from the root state, an optimization to
   -- avoid having to walk all transitions, at the cost of using a bit of
   -- additional memory.
-  }
+  } deriving (Generic)
 
-type CodePoint = Int
+instance NFData v => NFData (AcMachine v)
 
 -- AUTOMATON CONSTRUCTION
 
@@ -238,16 +242,7 @@ type ValuesMap v = IntMap [v]
 
 -- | Build the trie of the Aho-Corasick state machine for all input needles.
 buildTransitionMap :: forall v. [([CodeUnit], v)] -> (Int, TransitionMap, ValuesMap v)
-buildTransitionMap needles = buildTransitionMap' [(decodeUtf8 cus, val) | (cus, val) <- needles]
-
--- | Decode a list of UTF-8 code units into a list of code points.
-decodeUtf8 :: [CodeUnit] -> [CodePoint]
-decodeUtf8 [] = []
-decodeUtf8 (cu0 : cus) | cu0 < 0xc0 = fromIntegral cu0 : decodeUtf8 cus
-decodeUtf8 (cu0 : cu1 : cus) | cu0 < 0xe0 = Utf8.decode2 cu0 cu1 : decodeUtf8 cus
-decodeUtf8 (cu0 : cu1 : cu2 : cus) | cu0 < 0xf0 = Utf8.decode3 cu0 cu1 cu2 : decodeUtf8 cus
-decodeUtf8 (cu0 : cu1 : cu2 : cu3 : cus) = Utf8.decode4 cu0 cu1 cu2 cu3 : decodeUtf8 cus
-decodeUtf8 cus = error $ "Invalid UTF-8 input sequence at " ++ show (take 4 cus)
+buildTransitionMap needles = buildTransitionMap' [(Utf8.decodeUtf8 cus, val) | (cus, val) <- needles]
 
 buildTransitionMap' :: forall v. [([CodePoint], v)] -> (Int, TransitionMap, ValuesMap v)
 buildTransitionMap' =
