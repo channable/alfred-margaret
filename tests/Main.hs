@@ -12,4 +12,4 @@ main = hspec $ do
   describe "Data.Text.AhoCorasick" A.spec
   describe "Data.Text.BoyerMoore" B.spec
   describe "Data.Text.Utf8.AhoCorasick" U8A.spec
-  describe "Data.Text.Utf8.Utf8" U8.spec
+  describe "Data.Text.Utf8" U8.spec

@@ -4,10 +4,14 @@ import Control.Monad (forM_)
 import qualified Data.Char as Char
 import Test.Hspec (Spec, describe, it, shouldSatisfy)
 
+import qualified Data.Text.Utf8 as Utf8
+
 spec :: Spec
 spec = do
     describe "Properties of the BMP in UTF-8" $ do
+
         describe "Char.toLower" $ do
+
             {-
             it "does not generate common suffixes" $ do
                 forM_ bmpCodepoints $ flip shouldSatisfy $ \cp ->
@@ -22,10 +26,17 @@ spec = do
                 forM_ bmpCodepoints $ flip shouldSatisfy $ \cp ->
                     mapCp Char.toLower cp == mapCp (Char.toLower . Char.toLower) cp
 
+    describe "toLowerAscii" $ do
+
+        it "is equivalent to Char.toLower on ASCII" $ do
+
+            forM_ [0..0x7f] $ flip shouldSatisfy $ \cp ->
+                mapCp Char.toLower cp == Utf8.toLowerAscii cp
+
 -- | The Basic Multilingual Plane (BMP) contains the Unicode code points
 -- 0x0000 through 0xFFFF.
 bmpCodepoints :: [Int]
-bmpCodepoints = [0..0x10000]
+bmpCodepoints = [0..0xffff]
 
 mapCp :: (Char -> Char) -> Int -> Int
 mapCp f = Char.ord . f . Char.chr
