@@ -10,6 +10,7 @@
 module Data.Text.Utf8.AhoCorasickSpec where
 
 import Control.Monad (forM_)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Primitive (byteArrayFromList)
 import Data.String (IsString, fromString)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
@@ -18,11 +19,12 @@ import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 import qualified Data.Text.Utf8.AhoCorasick.Replacer as Replacer
 import qualified Data.Text.Utf8.AhoCorasick.Searcher as Searcher
-import Test.Hspec.QuickCheck (prop)
+import Test.Hspec.QuickCheck (modifyMaxSize, prop)
 import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
 import qualified Test.QuickCheck.Gen as Gen
 
 import Data.Text.Orphans ()
+import qualified Data.Text.Utf8.AhoCorasick.Splitter as Splitter
 
 spec :: Spec
 spec = do
@@ -75,7 +77,7 @@ spec = do
 
             it "works with the the first line of the illiad" $ do
                 let illiad = "Ἄνδρα μοι ἔννεπε, Μοῦσα, πολύτροπον, ὃς μάλα πολλὰ"
-                let needleSets = [(["μοι"], True), (["Ὀδυσεύς"], False)]
+                    needleSets = [(["μοι"], True), (["Ὀδυσεύς"], False)]
 
                 forM_ needleSets $ \(needles, expectedResult) -> do
                     let searcher = Searcher.build Aho.CaseSensitive needles
@@ -171,6 +173,22 @@ spec = do
                 in
                     Replacer.run replacer haystack `shouldBe` expected
             -}
+
+    describe "Splitter" $ do
+
+        describe "split" $ do
+
+            it "passes an example" $ do
+                let separator = "bob"
+                    splitter = Splitter.build separator
+
+                Splitter.split splitter "C++bobobCOBOLbobScala" `shouldBe` "C++" :| ["obCOBOL", "Scala"]
+
+            it "neatly splits the first line of the illiad" $ do
+                let splitter = Splitter.build ", "
+
+                Splitter.split splitter "Ἄνδρα μοι ἔννεπε, Μοῦσα, πολύτροπον, ὃς μάλα πολλὰ" `shouldBe`
+                    "Ἄνδρα μοι ἔννεπε" :| ["Μοῦσα", "πολύτροπον", "ὃς μάλα πολλὰ"]
 
 -- helpers
 

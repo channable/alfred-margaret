@@ -32,6 +32,7 @@ module Data.Text.Utf8
     , unicode2utf8
     , unpackUtf8
     , unsafeCutUtf8
+    , unsafeSliceUtf8
     ) where
 
 import Control.DeepSeq (NFData, rnf)
@@ -148,6 +149,11 @@ unsafeCutUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) (Text !u8data !off 
   ( Text u8data off begin
   , Text u8data (off + begin + length) (len - begin - length)
   )
+
+-- TODO: Make this more readable once we have text-2.0.
+unsafeSliceUtf8 :: CodeUnitIndex -> CodeUnitIndex -> Text -> Text
+unsafeSliceUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) (Text !u8data !off !len) =
+  Text u8data (off + begin) length
 
 -- | Decode a list of UTF-8 code units into a list of code points.
 decodeUtf8 :: [CodeUnit] -> [CodePoint]
