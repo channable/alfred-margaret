@@ -7,7 +7,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Data.Text.AhoCorasickSpec (spec) where
+module Data.Text.AhoCorasickSpec
+    ( spec
+    ) where
 
 import Control.DeepSeq (rnf)
 import Control.Monad (forM_, unless)

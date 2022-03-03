@@ -54,6 +54,7 @@ library
                      , Data.Text.Utf8.AhoCorasick.Automaton
                      , Data.Text.Utf8.AhoCorasick.Replacer
                      , Data.Text.Utf8.AhoCorasick.Searcher
+                     , Data.Text.Utf8.AhoCorasick.Splitter
                      , Data.TypedByteArray
   build-depends:
       base             >= 4.7 && < 5
