@@ -5,16 +5,19 @@
 -- repository root.
 
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE MagicHash #-}
 
 module Data.Text.Utf8
-    ( CodeUnit
+    ( CodePoint
+    , CodeUnit
     , CodeUnitIndex (..)
     , Data.Text.Utf8.readFile
     , Text (..)
     , decode2
     , decode3
     , decode4
+    , decodeUtf8
     , indexTextArray
     , pack
     , stringToByteArray
@@ -23,20 +26,27 @@ module Data.Text.Utf8
     , unpackUtf8
     ) where
 
+import Control.DeepSeq (NFData, rnf)
 import Data.Bits (Bits (shiftL), shiftR, (.&.), (.|.))
 import Data.Char (ord)
 import Data.Foldable (for_)
+import Data.Hashable (Hashable (hashWithSalt), hashByteArrayWithSalt)
 import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, indexByteArray,
                                  newByteArray, sizeofByteArray, unsafeFreezeByteArray,
                                  writeByteArray)
 import Data.Word (Word8)
 import GHC.Base (Int (I#), compareByteArrays#)
 import Prelude hiding (length)
+#if defined(HAS_AESON)
+import Data.Aeson (FromJSON, ToJSON, Value (String), parseJSON, toJSON, withText)
+#endif
 
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
+import qualified Data.Text as T
 
 type CodeUnit = Word8
+type CodePoint = Int
 
 data Text
   -- | A placeholder constructor for UTF-8 encoded text until we can use text-2.0.
@@ -52,9 +62,31 @@ instance Eq Text where
   (Text (ByteArray u8data) (I# offset) (I# length)) == (Text (ByteArray u8data') (I# offset') (I# length')) =
     I# length == I# length' && I# (compareByteArrays# u8data offset u8data' offset' length) == 0
 
+-- Instances required for the Searcher modules etc.
+
+#if defined(HAS_AESON)
+-- NOTE: This is ugly and slow but will be removed once we move to text-2.0.
+instance ToJSON Text where
+  toJSON = String . T.pack . unpack
+
+instance FromJSON Text where
+  parseJSON = withText "Data.Text.Utf8.Text" (pure . pack . T.unpack)
+#endif
+
+-- Copied from https://hackage.haskell.org/package/hashable-1.4.0.2/docs/src/Data.Hashable.Class.html#line-746
+instance Hashable Text where
+  hashWithSalt salt (Text (ByteArray arr) off len) =
+    hashByteArrayWithSalt arr (off `shiftL` 1) (len `shiftL` 1) (hashWithSalt salt len)
+
+instance NFData Text where
+  rnf (Text (ByteArray !_) !_ !_) = ()
+
 newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int
     } deriving Show
+
+unpack :: Text -> String
+unpack = map Char.chr . decodeUtf8 . unpackUtf8
 
 {-# INLINABLE unpackUtf8 #-}
 unpackUtf8 :: Text -> [CodeUnit]
@@ -64,6 +96,15 @@ unpackUtf8 (Text u8data offset length) =
     go i n = indexTextArray u8data i : go (i + 1) (n - 1)
   in
     go offset length
+
+-- | Decode a list of UTF-8 code units into a list of code points.
+decodeUtf8 :: [CodeUnit] -> [CodePoint]
+decodeUtf8 [] = []
+decodeUtf8 (cu0 : cus) | cu0 < 0xc0 = fromIntegral cu0 : decodeUtf8 cus
+decodeUtf8 (cu0 : cu1 : cus) | cu0 < 0xe0 = decode2 cu0 cu1 : decodeUtf8 cus
+decodeUtf8 (cu0 : cu1 : cu2 : cus) | cu0 < 0xf0 = decode3 cu0 cu1 cu2 : decodeUtf8 cus
+decodeUtf8 (cu0 : cu1 : cu2 : cu3 : cus) = decode4 cu0 cu1 cu2 cu3 : decodeUtf8 cus
+decodeUtf8 cus = error $ "Invalid UTF-8 input sequence at " ++ show (take 4 cus)
 
 {-# INLINE indexTextArray #-}
 indexTextArray :: ByteArray -> Int -> CodeUnit
