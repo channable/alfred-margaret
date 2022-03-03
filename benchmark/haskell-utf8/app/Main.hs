@@ -5,7 +5,9 @@
 -- | Benchmark for our Aho-Corasick implementation.
 module Main where
 
+import Control.DeepSeq (force)
 import Control.Exception (evaluate)
+import Control.Monad (void, when)
 import Data.Foldable (for_, traverse_)
 import System.IO (hPrint, stderr, stdout)
 import Text.Printf (hPrintf)
@@ -13,7 +15,6 @@ import Text.Printf (hPrintf)
 import qualified System.Clock as Clock
 import qualified System.Environment as Env
 
-import Control.Monad (when)
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 
@@ -24,6 +25,9 @@ processFile :: FilePath -> IO ()
 processFile path = do
   -- TODO: Revert once we have text-2.0
   (needles, haystack) <- readNeedleHaystackFile path
+
+  void $ evaluate $ force needles
+  void $ evaluate $ force haystack
 
   for_ [0 :: Int .. 5] $ \i -> do
     (count, duration) <- acBench needles haystack
