@@ -16,7 +16,13 @@ import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
+import qualified Data.Text.Utf8.AhoCorasick.Replacer as Replacer
 import qualified Data.Text.Utf8.AhoCorasick.Searcher as Searcher
+import Test.Hspec.QuickCheck (prop)
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
+import qualified Test.QuickCheck.Gen as Gen
+
+import Data.Text.Orphans ()
 
 spec :: Spec
 spec = do
@@ -74,6 +80,97 @@ spec = do
                 forM_ needleSets $ \(needles, expectedResult) -> do
                     let searcher = Searcher.build Aho.CaseSensitive needles
                     Searcher.containsAny searcher illiad `shouldBe` expectedResult
+
+    modifyMaxSize (const 10) $ describe "Replacer" $ do
+
+        describe "run" $ do
+            let
+                genHaystack = fmap Utf8.pack $ Gen.listOf $ Gen.frequency [(40, Gen.elements "abAB"), (1, pure 'İ'), (1, arbitrary)]
+
+                -- needles may not be empty, because empty needles are filtered out in an I.ActionReplaceMultiple
+                genNeedle = fmap Utf8.pack $ Gen.resize 3 $ Gen.listOf1 $ Gen.elements "abAB"
+                genReplaces = Gen.listOf $ (,) <$> genNeedle <*> arbitrary
+                shrinkReplaces = filter (not . any (\(needle, _) -> Utf8.null needle)) . shrink
+
+                replace needles haystack =
+                    Replacer.run (Replacer.build Aho.CaseSensitive needles) haystack
+
+                replaceIgnoreCase needles haystack =
+                    Replacer.run (Replacer.build Aho.IgnoreCase needles) haystack
+
+            it "replaces all occurrences" $ do
+                replace [("A", "B")] "AXAXB" `shouldBe` "BXBXB"
+                replace [("A", "B"), ("X", "Y")] "AXAXB" `shouldBe` "BYBYB"
+                replace [("aaa", ""), ("b", "c")] "aaabaaa" `shouldBe` "c"
+                -- Have a few non-matching needles too.
+                replace [("A", "B"), ("Q", "r"), ("Z", "")] "AXAXB" `shouldBe` "BXBXB"
+
+            it "replaces only non-overlapping matches" $ do
+                replace [("aa", "zz"), ("bb", "w")] "aaabbb" `shouldBe` "zzawb"
+                replace [("aaa", "")] "aaaaa" `shouldBe` "aa"
+
+            it "replaces all occurrences in priority order" $ do
+                replace [("A", ""), ("BBBB", "bingo")] "BBABB" `shouldBe` "bingo"
+                replace [("BB", ""), ("BBBB", "bingo")] "BBBB" `shouldBe` ""
+
+            it "replaces needles that contain a surrogate pair" $
+                replace [("\x1f574", "levitating man in business suit")]
+                    "the \x1f574" `shouldBe` "the levitating man in business suit"
+
+
+            it "replaces all occurrences case-insensitively" $ do
+                replaceIgnoreCase [("A", "B")] "AXAXB" `shouldBe` "BXBXB"
+                replaceIgnoreCase [("A", "B")] "axaxb" `shouldBe` "BxBxb"
+                replaceIgnoreCase [("a", "b")] "AXAXB" `shouldBe` "bXbXB"
+
+                replaceIgnoreCase [("A", "B"), ("X", "Y")] "AXAXB" `shouldBe` "BYBYB"
+                replaceIgnoreCase [("A", "B"), ("X", "Y")] "axaxb" `shouldBe` "BYBYb"
+                replaceIgnoreCase [("a", "b"), ("x", "y")] "AXAXB" `shouldBe` "bybyB"
+
+            it "matches replacements case-insensitively" $
+              replaceIgnoreCase [("foo", "BAR"), ("bar", "BAZ")] "Foo" `shouldBe` "BAZ"
+
+            it "matches replacements case-insensitively for non-ascii characters" $ do
+                replaceIgnoreCase [("éclair", "lightning")] "Éclair" `shouldBe` "lightning"
+                -- Note: U+0319 is an uppercase alpha, which looks exactly like A, but it
+                -- is a different code point.
+                replaceIgnoreCase [("bèta", "α"), ("\x0391", "alpha")] "BÈTA" `shouldBe` "alpha"
+
+            it "matches surrogate pairs case-insensitively" $ do
+                -- We can't lowercase a levivating man in business suit, but that should
+                -- not affect whether we match it or not.
+                replaceIgnoreCase [("\x1f574", "levitating man in business suit")] "the \x1f574"
+                    `shouldBe` "the levitating man in business suit"
+
+            prop "satisfies (run . compose a b) == (run b (run a))" $
+                forAllShrink genHaystack shrink $ \haystack ->
+                forAll arbitrary $ \case_ ->
+                forAllShrink genReplaces shrinkReplaces $ \replaces1 ->
+                forAllShrink genReplaces shrinkReplaces $ \replaces2 ->
+                let
+                    rm1 = Replacer.build case_ replaces1
+                    rm2 = Replacer.build case_ replaces2
+                    Just rm12 = Replacer.compose rm1 rm2
+                in
+                    Replacer.run rm2 (Replacer.run rm1 haystack)
+                    `shouldBe` Replacer.run rm12 haystack
+
+            prop "is identity for empty needles" $ \case_ haystack ->
+                let replacerId = Replacer.build case_ []
+                in Replacer.run replacerId haystack `shouldBe` haystack
+
+            -- TODO: Uncomment when we have text-2.0
+            {-
+            prop "is equivalent to sequential Text.replace calls" $
+                forAllShrink genHaystack shrink $ \haystack ->
+                forAllShrink genReplaces shrinkReplaces $ \replaces ->
+                let
+                    replacer = Replacer.build CaseSensitive replaces
+                    replaceText agg (needle, replacement) = Text.replace needle replacement agg
+                    expected = foldl' replaceText haystack replaces
+                in
+                    Replacer.run replacer haystack `shouldBe` expected
+            -}
 
 -- helpers
 

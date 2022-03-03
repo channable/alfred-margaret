@@ -52,6 +52,7 @@ library
                      , Data.Text.Utf16
                      , Data.Text.Utf8
                      , Data.Text.Utf8.AhoCorasick.Automaton
+                     , Data.Text.Utf8.AhoCorasick.Replacer
                      , Data.Text.Utf8.AhoCorasick.Searcher
                      , Data.TypedByteArray
   build-depends:
