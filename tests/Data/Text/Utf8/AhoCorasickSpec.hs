@@ -10,20 +10,23 @@
 module Data.Text.Utf8.AhoCorasickSpec where
 
 import Control.Monad (forM_)
+import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Primitive (byteArrayFromList)
 import Data.String (IsString, fromString)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
+import Test.Hspec.QuickCheck (modifyMaxSize, prop)
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
+
+import qualified Data.Text as T
+import qualified Test.QuickCheck.Gen as Gen
+
+import Data.Text.Orphans ()
 
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 import qualified Data.Text.Utf8.AhoCorasick.Replacer as Replacer
 import qualified Data.Text.Utf8.AhoCorasick.Searcher as Searcher
-import Test.Hspec.QuickCheck (modifyMaxSize, prop)
-import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
-import qualified Test.QuickCheck.Gen as Gen
-
-import Data.Text.Orphans ()
 import qualified Data.Text.Utf8.AhoCorasick.Splitter as Splitter
 
 spec :: Spec
@@ -162,17 +165,16 @@ spec = do
                 in Replacer.run replacerId haystack `shouldBe` haystack
 
             -- TODO: Uncomment when we have text-2.0
-            {-
             prop "is equivalent to sequential Text.replace calls" $
                 forAllShrink genHaystack shrink $ \haystack ->
                 forAllShrink genReplaces shrinkReplaces $ \replaces ->
                 let
-                    replacer = Replacer.build CaseSensitive replaces
-                    replaceText agg (needle, replacement) = Text.replace needle replacement agg
+                    replacer = Replacer.build Aho.CaseSensitive replaces
+                    -- TODO: Remove conversions once we move to text-2.0
+                    replaceText agg (needle, replacement) = Utf8.pack $ T.unpack $ T.replace (T.pack $ Utf8.unpack needle) (T.pack $ Utf8.unpack replacement) (T.pack $ Utf8.unpack agg)
                     expected = foldl' replaceText haystack replaces
                 in
                     Replacer.run replacer haystack `shouldBe` expected
-            -}
 
     describe "Splitter" $ do
 

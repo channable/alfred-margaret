@@ -30,6 +30,7 @@ module Data.Text.Utf8
     , stringToByteArray
     , toLowerAscii
     , unicode2utf8
+    , unpack
     , unpackUtf8
     , unsafeCutUtf8
     , unsafeSliceUtf8
