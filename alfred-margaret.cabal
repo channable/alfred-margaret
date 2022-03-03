@@ -18,6 +18,8 @@ tested-with:
                      GHC == 8.6.3
                      -- Stackage LTS 16.18.
                    , GHC == 8.8.4
+                     -- Stackage LTS 18.27
+                   , GHC == 8.10.7
 
 source-repository head
   type:     git
