@@ -35,9 +35,11 @@ interpreting this graph.
 Check if a string contains one of the needles:
 
 ```haskell
+
+import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Searcher as Searcher
 
-searcher = Searcher.build ["tshirt", "shirts", "shorts"]
+searcher = Searcher.build Aho.CaseSensitive ["tshirt", "shirts", "shorts"]
 
 Searcher.containsAny searcher "short tshirts"
 > True
@@ -48,7 +50,9 @@ Searcher.containsAny searcher "long shirt"
 Searcher.containsAny searcher "Short TSHIRTS"
 > False
 
-Searcher.containsAnyIgnoreCase searcher "Short TSHIRTS"
+searcher' = Searcher.build Aho.IgnoreCase ["tshirt", "shirts", "shorts"]
+
+Searcher.containsAny searcher' "Short TSHIRTS"
 > True
 ```
 
