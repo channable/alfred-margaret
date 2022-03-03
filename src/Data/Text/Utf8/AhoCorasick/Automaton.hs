@@ -302,6 +302,7 @@ asciiCount = 128
 -- | Build a lookup table for the first 128 code points, that can be used for
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
+{-# NOINLINE buildAsciiTransitionLookupTable  #-}
 buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
 buildAsciiTransitionLookupTable transitions = TBA.generate asciiCount $ \i ->
   case IntMap.lookup i transitions of
