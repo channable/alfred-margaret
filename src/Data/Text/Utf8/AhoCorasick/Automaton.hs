@@ -84,7 +84,6 @@ type State = Int
 -- construct and read transitions.
 type Transition = Word64
 
--- TODO: Perhaps a word16 would be enough
 type Offset = Word32
 
 data Match v = Match
@@ -393,8 +392,6 @@ at :: forall a. Vector.Vector a -> Int -> a
 at = Vector.unsafeIndex
 
 {-# INLINE uAt #-}
-{-# SPECIALIZE INLINE uAt :: TypedByteArray Offset -> Int -> Offset  #-}
-{-# SPECIALIZE INLINE uAt :: TypedByteArray Transition -> Int -> Transition  #-}
 uAt :: Prim a => TypedByteArray a -> Int -> a
 uAt = TBA.unsafeIndex
 
