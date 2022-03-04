@@ -24,6 +24,6 @@ pkgs.mkShell {
         # For Haskell implementation
         pkgs.stack
         pkgs.gmp
-        pkgs.llvm
+        pkgs.llvmPackages_12.llvm
     ];
 }
