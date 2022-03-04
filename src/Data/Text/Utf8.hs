@@ -32,7 +32,7 @@ module Data.Text.Utf8
     , unicode2utf8
     , unpack
     , unpackUtf8
-      -- * Slicing functions
+      -- * Slicing Functions
       --
       -- $slicingFunctions
     , unsafeCutUtf8
