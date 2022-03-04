@@ -25,6 +25,7 @@ module Data.Text.Utf8
     , decodeUtf8
     , indexTextArray
     , lengthUtf8
+    , lowerCodePoint
     , lowerUtf8
     , pack
     , stringToByteArray
@@ -222,6 +223,17 @@ toLowerAscii cp
 {-# INLINE lowerUtf8 #-}
 lowerUtf8 :: Text -> Text
 lowerUtf8 = pack . map Char.toLower . unpack
+
+asciiCount :: Int
+asciiCount = 128
+
+{-# INLINE lowerCodePoint #-}
+-- | Lower-Case a UTF-8 codepoint.
+-- Uses 'toLowerAscii' for ASCII and 'Char.toLower' otherwise.
+lowerCodePoint :: Int -> Int
+lowerCodePoint cp
+  | cp < asciiCount = toLowerAscii cp
+  | otherwise = Char.ord $ Char.toLower $ Char.chr cp
 
 -- $slicingFunctions
 --

@@ -477,9 +477,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
 
         !possiblyLoweredCp = case caseSensitivity of
           CaseSensitive -> cp
-          IgnoreCase
-            | cp < asciiCount -> Utf8.toLowerAscii cp
-            | otherwise -> Char.ord $ Char.toLower $ Char.chr cp
+          IgnoreCase -> Utf8.lowerCodePoint cp
 
     {-# INLINE followCodePoint #-}
     followCodePoint :: Int -> Int -> a -> CodePoint -> State -> a

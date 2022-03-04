@@ -39,6 +39,11 @@ spec = do
             forM_ [0..0x7f] $ flip shouldSatisfy $ \cp ->
                 mapCp Char.toLower cp == Utf8.toLowerAscii cp
 
+    describe "lowerCodePoint" $ do
+
+        prop "is equivalent to Char.toLower on all of Unicode" $ \c ->
+            Utf8.lowerCodePoint (Char.ord c) `shouldBe` Char.ord (Char.toLower c)
+
     describe "slicing functions" $ do
 
         it "satisfies the example in Data.Text.Utf8" $ do
