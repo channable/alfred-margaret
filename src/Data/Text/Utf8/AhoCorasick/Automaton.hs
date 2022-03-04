@@ -49,12 +49,11 @@ import Data.Word (Word32, Word64)
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
-import Data.Primitive (Prim)
 import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..), indexTextArray)
-import Data.TypedByteArray (TypedByteArray)
+import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.TypedByteArray as TBA
@@ -303,11 +302,12 @@ asciiCount = 128
 -- | Build a lookup table for the first 128 code points, that can be used for
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
+{-# NOINLINE buildAsciiTransitionLookupTable  #-}
 buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
-buildAsciiTransitionLookupTable transitions = TBA.fromList $ map (\i ->
+buildAsciiTransitionLookupTable transitions = TBA.generate asciiCount $ \i ->
   case IntMap.lookup i transitions of
     Just state -> newTransition (fromIntegral i) state
-    Nothing    -> newWildcardTransition 0) [0..asciiCount - 1]
+    Nothing    -> newWildcardTransition 0
 
 -- | Traverse the state trie in breadth-first order.
 foldBreadthFirst :: (a -> State -> a) -> a -> TransitionMap -> a
