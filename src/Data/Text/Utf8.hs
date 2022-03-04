@@ -32,6 +32,9 @@ module Data.Text.Utf8
     , unicode2utf8
     , unpack
     , unpackUtf8
+      -- * Slicing functions
+      --
+      -- $slicingFunctions
     , unsafeCutUtf8
     , unsafeSliceUtf8
     ) where
@@ -61,10 +64,11 @@ type CodeUnit = Word8
 type CodePoint = Int
 
 data Text
-  -- | A placeholder constructor for UTF-8 encoded text until we can use text-2.0.
-  -- First Int marks the starting point of the UTF-8 sequence in the array (in bytes).
-  -- Second Int is the length of the UTF-8 sequence (in bytes).
-  = Text !ByteArray !Int !Int
+  -- | A placeholder data type for UTF-8 encoded text until we can use text-2.0.
+  = Text
+      !ByteArray -- ^ Underlying array encoded using UTF-8.
+      !Int -- ^ Starting position of the UTF-8 sequence in bytes.
+      !Int -- ^ Length of the UTF-8 sequence in bytes.
   deriving Show
 
 -- This instance, as well as the Show instance above, is necessary for the test suite.
@@ -130,32 +134,6 @@ unpackUtf8 (Text u8data offset length) =
 lengthUtf8 :: Text -> CodeUnitIndex
 lengthUtf8 (Text _ _ !length) = CodeUnitIndex length
 
--- TODO: Make this more readable once we have text-2.0.
---
--- >  off                 off+len
--- >   │                     │
--- >   ▼                     ▼
--- > ──┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬──
--- >  A│B│C│D│E│F│G│H│I│J│K│L│M│N
--- > ──┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴──
--- >       ▲           ▲
--- >       │           │
--- >  off+begin   off+begin+length
---
--- Visualizes:
---
--- > unsafeCutUtf8 2 6 "BCDEFGHIJKL" == ("BC", "JKL")
-unsafeCutUtf8 :: CodeUnitIndex -> CodeUnitIndex -> Text -> (Text, Text)
-unsafeCutUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) (Text !u8data !off !len) =
-  ( Text u8data off begin
-  , Text u8data (off + begin + length) (len - begin - length)
-  )
-
--- TODO: Make this more readable once we have text-2.0.
-unsafeSliceUtf8 :: CodeUnitIndex -> CodeUnitIndex -> Text -> Text
-unsafeSliceUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) (Text !u8data !off !len) =
-  Text u8data (off + begin) length
-
 -- | Decode a list of UTF-8 code units into a list of code points.
 decodeUtf8 :: [CodeUnit] -> [CodePoint]
 decodeUtf8 [] = []
@@ -203,11 +181,9 @@ readFile path = do
 -- | Decode 2 UTF-8 code units into their code point.
 -- The given code units should have the following format: ->
 --
--- @
--- ┌───────────────┬───────────────┐
--- │1 1 0 x x x x x│1 0 x x x x x x│
--- └───────────────┴───────────────┘
--- @
+-- > ┌───────────────┬───────────────┐
+-- > │1 1 0 x x x x x│1 0 x x x x x x│
+-- > └───────────────┴───────────────┘
 {-# INLINE decode2 #-}
 decode2 :: CodeUnit -> CodeUnit -> Int
 decode2 cu0 cu1 =
@@ -216,11 +192,9 @@ decode2 cu0 cu1 =
 -- | Decode 3 UTF-8 code units into their code point.
 -- The given code units should have the following format:
 --
--- @
--- ┌───────────────┬───────────────┬───────────────┐
--- │1 1 1 0 x x x x│1 0 x x x x x x│1 0 x x x x x x│
--- └───────────────┴───────────────┴───────────────┘
--- @
+-- > ┌───────────────┬───────────────┬───────────────┐
+-- > │1 1 1 0 x x x x│1 0 x x x x x x│1 0 x x x x x x│
+-- > └───────────────┴───────────────┴───────────────┘
 {-# INLINE decode3 #-}
 decode3 :: CodeUnit -> CodeUnit -> CodeUnit -> Int
 decode3 cu0 cu1 cu2 =
@@ -229,11 +203,9 @@ decode3 cu0 cu1 cu2 =
 -- | Decode 4 UTF-8 code units into their code point.
 -- The given code units should have the following format:
 --
--- @
--- ┌───────────────┬───────────────┬───────────────┬───────────────┐
--- │1 1 1 1 0 x x x│1 0 x x x x x x│1 0 x x x x x x│1 0 x x x x x x│
--- └───────────────┴───────────────┴───────────────┴───────────────┘
--- @
+-- > ┌───────────────┬───────────────┬───────────────┬───────────────┐
+-- > │1 1 1 1 0 x x x│1 0 x x x x x x│1 0 x x x x x x│1 0 x x x x x x│
+-- > └───────────────┴───────────────┴───────────────┴───────────────┘
 {-# INLINE decode4 #-}
 decode4 :: CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> Int
 decode4 cu0 cu1 cu2 cu3 =
@@ -250,3 +222,48 @@ toLowerAscii cp
 {-# INLINE lowerUtf8 #-}
 lowerUtf8 :: Text -> Text
 lowerUtf8 = pack . map Char.toLower . unpack
+
+-- $slicingFunctions
+--
+-- 'unsafeCutUtf8' and 'unsafeSliceUtf8' are used to retrieve slices of 'Text' values.
+-- @unsafeSliceUtf8 begin length@ returns a substring of length @length@ starting at @begin@.
+-- @unsafeSliceUtf8 begin length@ returns a tuple of the "surrounding" substrings.
+--
+-- They satisfy the following property:
+--
+-- > let (prefix, suffix) = unsafeCutUtf8 begin length t
+-- > in concat [prefix, unsafeSliceUtf8 begin length t, suffix] == t
+--
+-- The following diagram visualizes the relevant offsets for @begin = CodeUnitIndex 2@, @length = CodeUnitIndex 6@ and @t = \"BCDEFGHIJKL\"@.
+--
+-- >  off                 off+len
+-- >   │                     │
+-- >   ▼                     ▼
+-- > ──┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬──
+-- >  A│B│C│D│E│F│G│H│I│J│K│L│M│N
+-- > ──┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴──
+-- >       ▲           ▲
+-- >       │           │
+-- >  off+begin   off+begin+length
+-- >
+-- > unsafeSliceUtf8 begin length t == "DEFGHI"
+-- > unsafeCutUtf8 begin length t == ("BC", "JKL")
+--
+-- The shown array is open at each end because in general, @t@ may be a slice as well.
+--
+-- __WARNING__: As their name implies, these functions are not (necessarily) bounds-checked. Use at your own risk.
+
+-- TODO: Make this more readable once we have text-2.0.
+unsafeCutUtf8 :: CodeUnitIndex -- ^ Starting position of substring.
+  -> CodeUnitIndex -- ^ Length of substring.
+  -> Text -- ^ Initial string.
+  -> (Text, Text)
+unsafeCutUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) (Text !u8data !off !len) =
+  ( Text u8data off begin
+  , Text u8data (off + begin + length) (len - begin - length)
+  )
+
+-- TODO: Make this more readable once we have text-2.0.
+unsafeSliceUtf8 :: CodeUnitIndex -> CodeUnitIndex -> Text -> Text
+unsafeSliceUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) (Text !u8data !off !_len) =
+  Text u8data (off + begin) length
