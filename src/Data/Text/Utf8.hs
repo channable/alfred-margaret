@@ -34,6 +34,7 @@ module Data.Text.Utf8
     , unpack
     , unpackUtf8
     , unsafeIndexCodePoint
+    , unsafeIndexCodeUnit
       -- * Slicing Functions
       --
       -- $slicingFunctions
@@ -228,6 +229,12 @@ unsafeIndexCodePoint !u8data (CodeUnitIndex !idx)
     cuAt !i = indexTextArray u8data $ idx + i
     !cu0 = cuAt 0
 
+{-# INLINE unsafeIndexCodeUnit #-}
+-- | Get the code unit at the given index.
+unsafeIndexCodeUnit :: Text -> CodeUnitIndex -> CodeUnit
+unsafeIndexCodeUnit (Text u8data off len) (CodeUnitIndex index)
+  | index < 0 || index >= len = error $ "Index out of bounds " ++ show index
+  | otherwise = indexTextArray u8data $ off + index
 
 -- | Lower-case the ASCII code points A-Z and leave the rest of ASCII intact.
 {-# INLINE toLowerAscii #-}
@@ -251,7 +258,6 @@ lowerCodePoint :: Int -> Int
 lowerCodePoint cp
   | cp < asciiCount = toLowerAscii cp
   | otherwise = Char.ord $ Char.toLower $ Char.chr cp
-
 
 -- $slicingFunctions
 --
