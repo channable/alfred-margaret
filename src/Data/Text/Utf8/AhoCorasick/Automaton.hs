@@ -49,14 +49,12 @@ import Data.IntMap.Strict (IntMap)
 import Data.Word (Word32, Word64)
 import GHC.Generics (Generic)
 
-import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Utf8 (CodePoint, CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..),
-                       indexTextArray)
+import Data.Text.Utf8 (CodePoint, CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..))
 import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
@@ -468,12 +466,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
 
       where
-        !cu = indexTextArray u8data offset
-        (!codeUnits, !cp)
-          | cu < 0xc0 = (1, fromIntegral cu)
-          | cu < 0xe0 = (2, Utf8.decode2 cu $ indexTextArray u8data $ offset + 1)
-          | cu < 0xf0 = (3, Utf8.decode3 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2))
-          | otherwise = (4, Utf8.decode4 cu (indexTextArray u8data $ offset + 1) (indexTextArray u8data $ offset + 2) (indexTextArray u8data $ offset + 3))
+        (!codeUnits, !cp) = Utf8.unsafeIndexCodePoint u8data $ CodeUnitIndex offset
 
         !possiblyLoweredCp = case caseSensitivity of
           CaseSensitive -> cp

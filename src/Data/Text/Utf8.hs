@@ -33,6 +33,7 @@ module Data.Text.Utf8
     , unicode2utf8
     , unpack
     , unpackUtf8
+    , unsafeIndexCodePoint
       -- * Slicing Functions
       --
       -- $slicingFunctions
@@ -212,6 +213,22 @@ decode4 :: CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> Int
 decode4 cu0 cu1 cu2 cu3 =
   (fromIntegral cu0 .&. 0x7) `shiftL` 18 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 12 .|. (fromIntegral cu2 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu3 .&. 0x3f)
 
+-- | Decode a code point at the given 'CodeUnitIndex'.
+-- Returns garbage if there is no valid code point at that position.
+-- Does not perform bounds checking.
+-- See 'decode2', 'decode3' and 'decode4' for the expected format of multi-byte code points.
+unsafeIndexCodePoint :: ByteArray -> CodeUnitIndex -> (Int, CodePoint)
+{-# INLINE unsafeIndexCodePoint #-}
+unsafeIndexCodePoint !u8data (CodeUnitIndex !idx)
+  | cu0 < 0xc0 = (1, fromIntegral cu0)
+  | cu0 < 0xe0 = (2, decode2 cu0 (cuAt 1))
+  | cu0 < 0xf0 = (3, decode3 cu0 (cuAt 1) (cuAt 2))
+  | otherwise = (4, decode4 cu0 (cuAt 1) (cuAt 2) (cuAt 3))
+  where
+    cuAt !i = indexTextArray u8data $ idx + i
+    !cu0 = cuAt 0
+
+
 -- | Lower-case the ASCII code points A-Z and leave the rest of ASCII intact.
 {-# INLINE toLowerAscii #-}
 toLowerAscii :: (Ord p, Num p) => p -> p
@@ -234,6 +251,7 @@ lowerCodePoint :: Int -> Int
 lowerCodePoint cp
   | cp < asciiCount = toLowerAscii cp
   | otherwise = Char.ord $ Char.toLower $ Char.chr cp
+
 
 -- $slicingFunctions
 --
