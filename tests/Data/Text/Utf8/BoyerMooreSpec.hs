@@ -20,7 +20,6 @@ import Test.QuickCheck.Gen (Gen)
 import Test.QuickCheck.Instances ()
 
 -- import qualified Data.Text.Internal.Search as TextSearch
--- import qualified Data.Text.Unsafe as TextUnsafe
 import qualified Test.QuickCheck as QuickCheck
 import qualified Test.QuickCheck.Gen as Gen
 
@@ -32,6 +31,7 @@ import Data.Text.Utf8.BoyerMoore.Automaton (CaseSensitivity (..))
 import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
 -- import qualified Data.Text.BoyerMoore.Replacer as Replacer
 import qualified Data.Text.Utf8 as Text
+import qualified Data.Text.Utf8 as TextSearch
 import qualified Data.Text.Utf8 as Utf8
 
 -- | Test that for a single needle which equals the haystack, we find a single
@@ -59,15 +59,13 @@ matchEndPositions needle haystack =
   in
     fmap (Utf8.codeUnitIndex (Utf8.lengthUtf8 needle) +) matches
 
-{-
 -- | `matchEndPositions` implemented naively in terms of Text's functionality,
 -- which we assume to be correct.
 naiveMatchPositions :: Text -> Text -> [Int]
 naiveMatchPositions needle haystack =
   map toEndPos $ TextSearch.indices needle haystack
   where
-    toEndPos index = TextUnsafe.lengthWord16 needle + index
--}
+    toEndPos index = Utf8.codeUnitIndex (Utf8.lengthUtf8 needle) + index
 
 -- | Generate random needles and haystacks, such that the needles have a
 -- reasonable probability of occuring in the haystack, which would hardly be the
@@ -151,7 +149,7 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
 
       it "reports the correct UTF-16 index for surrogate pairs" $ do
         -- Note that the index after the match is 4, even though there is
-        -- only a single code point. U+1d11e is encoded as four code units
+        -- only a single code point. U+1d11e is encoded as four code units:
         -- in UTF-8:
         -- 0       4
         -- │       │
@@ -163,9 +161,17 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
         -- └─┴─┴─┴─┘
         matchEndPositions "𝄞" "𝄞" `shouldMatchList` [4]
 
-        -- A leviating woman in business suit with dark skin tone needs a
+        -- A levitating woman in business suit with dark skin tone needs a
         -- whopping 5 code points to encode. The first two need 4 code units each to encode,
-        -- the remaining three need 3 code units each for a total of 17 code units.
+        -- the remaining three need 3 code units each for a total of 17 code units:
+        -- 0       4       8                17
+        -- │       │       │                 │
+        -- ▼       ▼       ▼                 ▼
+        -- ┌───────┬───────┬─────┬─────┬─────┐
+        -- │   1   │   2   │  3  │  4  │  5  │ Code Points
+        -- ├─┬─┬─┬─┼─┬─┬─┬─┼─┬─┬─┼─┬─┬─┼─┬─┬─┤
+        -- │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ Code Units (Bytes)
+        -- └─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┘
         -- 1. U+1f574: man in business suit levitating (🕴)
         -- 2. U+1f3ff: emoji modifier Fitzpatrick type-6
         -- 3. U+200d:  zero width joiner
@@ -175,14 +181,6 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
         -- man in business suit with dark skin tone is a substring of the
         -- levivating woman in business suit. And the levivating man in
         -- business suit without particular skin tone is a substring of that.
-        -- 0       4       8                17
-        -- │       │       │                 │
-        -- ▼       ▼       ▼                 ▼
-        -- ┌───────┬───────┬─────┬─────┬─────┐
-        -- │   1   │   2   │  3  │  4  │  5  │ Code Points
-        -- ├─┬─┬─┬─┼─┬─┬─┬─┼─┬─┬─┼─┬─┬─┼─┬─┬─┤
-        -- │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ Code Units (Bytes)
-        -- └─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┘
         let
           examples =
             [ ("\x1f574\x1f3ff\x200d\x2640\xfe0f", 17)
@@ -203,7 +201,6 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
         matchEndPositions "\"\SO]JL\"" "aaaaa\"\SO]JL\"" `shouldMatchList` [11]
         matchEndPositions "\"X]JL\"" "aaaaa\"X]JL\"" `shouldMatchList` [11]
 
-    {-
     describe "when given random needles and haystacks" $ do
 
       prop "reports only infixes of the haystack" $
@@ -219,7 +216,6 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
       prop "reports all infixes of the haystack" $
         QuickCheck.forAllShrink arbitraryNeedleHaystack shrink $ \ (needle, haystack) ->
           matchEndPositions needle haystack `shouldMatchList` naiveMatchPositions needle haystack
-    -}
 
 {-
   describe "replaceSingleLimited" $ do

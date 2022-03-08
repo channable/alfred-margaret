@@ -26,6 +26,7 @@ module Data.Text.Utf8
     , decode4
     , decodeUtf8
     , indexTextArray
+    , indices
     , lengthUtf8
     , lowerCodePoint
     , lowerUtf8
@@ -40,6 +41,7 @@ module Data.Text.Utf8
       -- * Slicing Functions
       --
       -- $slicingFunctions
+    , isInfixOf
     , unsafeCutUtf8
     , unsafeSliceUtf8
     ) where
@@ -162,6 +164,47 @@ pack = go . stringToByteArray
 replicate :: Int -> Text -> Text
 replicate n = pack . Prelude.concat . Prelude.replicate n . unpack
 
+-- | Convert a 'Text' value into a 'T.Text' value.
+toUtf16Text :: Text -> T.Text
+toUtf16Text (Text u8data off len) =
+  T.unfoldr go 0
+  where
+    go i
+      | i >= len = Nothing
+      | otherwise =
+        let
+          (codeUnits, codePoint) = unsafeIndexCodePoint u8data (CodeUnitIndex $ off + i)
+        in
+          Just (Char.chr codePoint, i + codeUnits)
+
+-- TODO: Slow placeholder implementation until we can use text-2.0
+isInfixOf :: Text -> Text -> Bool
+isInfixOf needle haystack = T.isInfixOf (toUtf16Text needle) (toUtf16Text haystack)
+
+-- TODO: Naive string search, replace once we have text-2.0
+-- We can't use Data.Text.Internal.Search here because that one reports UTF-16 code unit indices.
+-- Complexity: O(n*m)
+indices :: Text -> Text -> [Int]
+indices needle haystack
+  | needleLen == 0 = []
+  | otherwise = go 0 0
+  where
+    CodeUnitIndex needleLen = lengthUtf8 needle
+    CodeUnitIndex haystackLen = lengthUtf8 haystack
+
+    go startIdx needleIdx
+      -- needle is longer than remaining haystack
+      | startIdx + needleLen > haystackLen = []
+      -- whole needle matched
+      | needleIdx >= needleLen = startIdx : go (startIdx + needleLen) 0
+      -- charachter mismatch
+      | needleCp /= haystackCp = go (startIdx + 1) 0
+      -- advance
+      | otherwise = go startIdx $ needleIdx + codeUnits
+      where
+        (codeUnits, needleCp) = indexCodePoint needle $ CodeUnitIndex needleIdx
+        (_, haystackCp) = indexCodePoint haystack $ CodeUnitIndex $ startIdx + needleIdx
+
 dropWhile :: (Char -> Bool) -> Text -> Text
 dropWhile predicate text@(Text u8data off len) =
   let
@@ -237,6 +280,10 @@ decode3 cu0 cu1 cu2 =
 decode4 :: CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> Int
 decode4 cu0 cu1 cu2 cu3 =
   (fromIntegral cu0 .&. 0x7) `shiftL` 18 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 12 .|. (fromIntegral cu2 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu3 .&. 0x3f)
+
+indexCodePoint :: Text -> CodeUnitIndex -> (Int, CodePoint)
+indexCodePoint (Text u8data off _len) (CodeUnitIndex index) =
+  unsafeIndexCodePoint u8data $ CodeUnitIndex $ off + index
 
 -- | Decode a code point at the given 'CodeUnitIndex'.
 -- Returns garbage if there is no valid code point at that position.
