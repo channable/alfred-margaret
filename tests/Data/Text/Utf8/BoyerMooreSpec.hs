@@ -27,12 +27,12 @@ import Data.Text.Orphans ()
 import Data.Text.Utf8 (Text)
 import Data.Text.Utf8.BoyerMoore.Automaton (CaseSensitivity (..))
 
--- import qualified Data.Text.AhoCorasick.Replacer as AhoReplacer
-import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
--- import qualified Data.Text.BoyerMoore.Replacer as Replacer
 import qualified Data.Text.Utf8 as Text
 import qualified Data.Text.Utf8 as TextSearch
 import qualified Data.Text.Utf8 as Utf8
+import qualified Data.Text.Utf8.AhoCorasick.Replacer as AhoReplacer
+import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
+import qualified Data.Text.Utf8.BoyerMoore.Replacer as Replacer
 
 -- | Test that for a single needle which equals the haystack, we find a single
 -- match. Does not apply to the empty needle.
@@ -217,21 +217,16 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
         QuickCheck.forAllShrink arbitraryNeedleHaystack shrink $ \ (needle, haystack) ->
           matchEndPositions needle haystack `shouldMatchList` naiveMatchPositions needle haystack
 
-{-
   describe "replaceSingleLimited" $ do
 
     prop "is equivalent to Aho-Corasick replacer with a single needle" $
       forAllShrink arbitraryNeedleHaystack shrink $ \(needle, haystack) ->
       forAllShrink arbitrary shrink $ \replacement ->
-      forAll arbitrary $ \case_ ->
       let
-        expected = AhoReplacer.run (AhoReplacer.build case_ [(needle, replacement)]) haystack
+        expected = AhoReplacer.run (AhoReplacer.build CaseSensitive [(needle, replacement)]) haystack
 
-        auto = BoyerMoore.buildAutomaton $ case case_ of
-          IgnoreCase -> Utf16.lowerUtf16 needle
-          CaseSensitive -> needle
+        auto = BoyerMoore.buildAutomaton needle
 
-        actual = Replacer.replaceSingleLimited case_ auto replacement haystack maxBound
+        actual = Replacer.replaceSingleLimited CaseSensitive auto replacement haystack maxBound
       in
         actual `shouldBe` Just expected
--}
