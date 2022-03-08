@@ -84,6 +84,7 @@ test-suite test-suite
   other-modules:       Data.Text.AhoCorasickSpec
                      , Data.Text.BoyerMooreSpec
                      , Data.Text.Utf8.AhoCorasickSpec
+                     , Data.Text.Utf8.BoyerMooreSpec
                      , Data.Text.Utf8.Utf8Spec
                      , Data.Text.Orphans
   hs-source-dirs:      tests

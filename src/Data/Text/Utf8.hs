@@ -16,8 +16,10 @@ module Data.Text.Utf8
     , CodeUnit
     , CodeUnitIndex (..)
     , Data.Text.Utf8.concat
+    , Data.Text.Utf8.dropWhile
     , Data.Text.Utf8.null
     , Data.Text.Utf8.readFile
+    , Data.Text.Utf8.replicate
     , Text (..)
     , decode2
     , decode3
@@ -155,6 +157,28 @@ pack :: String -> Text
 pack = go . stringToByteArray
   where
     go !arr = Text arr 0 $ sizeofByteArray arr
+
+-- TODO: Slow placeholder implementation until we can use text-2.0
+replicate :: Int -> Text -> Text
+replicate n = pack . Prelude.concat . Prelude.replicate n . unpack
+
+dropWhile :: (Char -> Bool) -> Text -> Text
+dropWhile predicate text@(Text u8data off len) =
+  let
+    go i
+      | i >= len = i
+      | otherwise =
+        let
+          (codeUnits, codePoint) = unsafeIndexCodePoint u8data (CodeUnitIndex $ off + i)
+        in
+          if predicate $ Char.chr codePoint then
+            go $ i + codeUnits
+          else
+            i
+
+    prefixEnd = go 0
+  in
+    unsafeSliceUtf8 (CodeUnitIndex prefixEnd) (CodeUnitIndex $ len - prefixEnd) text
 
 stringToByteArray :: String -> ByteArray
 stringToByteArray = byteArrayFromList . concatMap char2utf8

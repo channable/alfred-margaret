@@ -43,7 +43,6 @@ import GHC.Generics (Generic)
 #if defined(HAS_AESON)
 import qualified Data.Aeson as AE
 #endif
-import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Vector.Unboxed as UVector
 import qualified Data.Vector.Unboxed.Mutable as UMVector
 
@@ -242,26 +241,23 @@ buildSuffixTable pattern = runST $ do
 -- in the input string. For example, if there's a character that is not contained in the pattern at
 -- all, we can skip ahead until after that character.
 data BadCharTable = BadCharTable
-  { badCharTableAscii :: {-# UNPACK #-} !(UVector.Vector Int)
+  { badCharTableEntries :: {-# UNPACK #-} !(UVector.Vector Int)
     -- ^ The element type should be CodeUnitIndex, but there's no unboxed vector for that type, and
     -- defining it would be a lot of boilerplate.
-  , badCharTableNonAscii :: !(HashMap.HashMap CodeUnit CodeUnitIndex)
   , badCharTablePatternLen :: CodeUnitIndex
   }
   deriving stock (Generic, Show)
   deriving anyclass (NFData)
 
 -- | Number of entries in the fixed-size lookup-table of the bad char table.
-asciiCount :: Int
-{-# INLINE asciiCount #-}
-asciiCount = 128
+badcharTableSize :: Int
+{-# INLINE badcharTableSize #-}
+badcharTableSize = 256
 
 -- | Lookup an entry in the bad char table.
 badCharLookup :: BadCharTable -> CodeUnit -> CodeUnitIndex
 {-# INLINE badCharLookup #-}
-badCharLookup (BadCharTable asciiTable nonAsciis patLen) char
-  | intChar < asciiCount = CodeUnitIndex $ indexTable asciiTable intChar
-  | otherwise = HashMap.lookupDefault patLen char nonAsciis
+badCharLookup (BadCharTable asciiTable _patLen) char = CodeUnitIndex $ indexTable asciiTable intChar
   where
     intChar = fromIntegral char
 
@@ -296,7 +292,7 @@ buildBadCharTable pattern = runST $ do
 
   -- Initialize table with the maximum skip distance, which is the length of the pattern.
   -- This applies to all characters that are not part of the pattern.
-  asciiTable <- UMVector.replicate asciiCount $ codeUnitIndex patLen
+  asciiTable <- UMVector.replicate badcharTableSize $ codeUnitIndex patLen
 
   let
     -- Fill the bad character table based on the rightmost occurrence of a character in the pattern.
@@ -327,26 +323,20 @@ buildBadCharTable pattern = runST $ do
 
     --    Haystack: aaadddabcdbb
     --    Pattern:     adcd
-    fillTable !i !nonAsciis
+    fillTable !i
       -- for(i = 0; i < patLen - 1; i++) {
       | i < patLen - 1 = do
         let patChar = Utf8.unsafeIndexCodeUnit pattern i
-        if fromIntegral patChar < asciiCount
-          then do
-            UMVector.write asciiTable (fromIntegral patChar) (codeUnitIndex $ patLen - 1 - i)
-            fillTable (i + 1) nonAsciis
-          else
-            fillTable (i + 1) (HashMap.insert patChar (patLen - 1 - i) nonAsciis)
-      -- }
-      | otherwise = pure nonAsciis
+        UMVector.write asciiTable (fromIntegral patChar) (codeUnitIndex $ patLen - 1 - i)
+        fillTable (i + 1)
+      | otherwise = pure ()
 
-  nonAsciis <- fillTable 0 HashMap.empty
+  fillTable 0
 
   asciiTableFrozen <- UVector.unsafeFreeze asciiTable
 
   pure BadCharTable
-    { badCharTableAscii = asciiTableFrozen
-    , badCharTableNonAscii = nonAsciis
+    { badCharTableEntries = asciiTableFrozen
     , badCharTablePatternLen = patLen
     }
 

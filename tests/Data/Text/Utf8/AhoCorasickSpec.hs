@@ -13,7 +13,6 @@ import Control.Monad (forM_)
 import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Primitive (byteArrayFromList)
-import Data.String (IsString, fromString)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (modifyMaxSize, prop)
 import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
@@ -164,7 +163,6 @@ spec = do
                 let replacerId = Replacer.build case_ []
                 in Replacer.run replacerId haystack `shouldBe` haystack
 
-            -- TODO: Uncomment when we have text-2.0
             prop "is equivalent to sequential Text.replace calls" $
                 forAllShrink genHaystack shrink $ \haystack ->
                 forAllShrink genReplaces shrinkReplaces $ \replaces ->
@@ -194,11 +192,8 @@ spec = do
 
 -- helpers
 
-instance IsString Utf8.Text where
-    fromString = Utf8.pack
-
-utf8Test :: String -> [Utf8.CodeUnit] -> Expectation
-utf8Test str byteList = fromString str `shouldBe` Utf8.Text (byteArrayFromList byteList) 0 (length byteList)
+utf8Test :: Utf8.Text -> [Utf8.CodeUnit] -> Expectation
+utf8Test str byteList = str `shouldBe` Utf8.Text (byteArrayFromList byteList) 0 (length byteList)
 
 -- From ./benchmark
 countMatches :: Aho.CaseSensitivity -> [Utf8.Text] -> Utf8.Text -> Int
