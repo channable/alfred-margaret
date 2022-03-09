@@ -466,7 +466,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
 
       where
-        (!codeUnits, !cp) = Utf8.unsafeIndexCodePoint u8data $ CodeUnitIndex offset
+        (!codeUnits, !cp) = Utf8.unsafeIndexCodePoint' u8data $ CodeUnitIndex offset
 
         !possiblyLoweredCp = case caseSensitivity of
           CaseSensitive -> cp
