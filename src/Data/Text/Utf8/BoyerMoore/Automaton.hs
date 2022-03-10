@@ -20,7 +20,7 @@
 --
 -- The algorithm here can be potentially improved by including the Galil rule
 -- (https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string-search_algorithm#The_Galil_rule)
-module Data.Text.BoyerMoore.Automaton
+module Data.Text.Utf8.BoyerMoore.Automaton
     ( Automaton
     , CaseSensitivity (..)
     , CodeUnitIndex (..)
@@ -28,7 +28,6 @@ module Data.Text.BoyerMoore.Automaton
     , buildAutomaton
     , patternLength
     , patternText
-    , runLower
     , runText
     ) where
 
@@ -38,19 +37,19 @@ import Control.DeepSeq (NFData)
 import Control.Monad (when)
 import Control.Monad.ST (runST)
 import Data.Hashable (Hashable (..), Hashed, hashed, unhashed)
-import Data.Text.Internal (Text (..))
 import GHC.Generics (Generic)
 
 #if defined(HAS_AESON)
 import qualified Data.Aeson as AE
 #endif
-import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Vector.Unboxed as UVector
 import qualified Data.Vector.Unboxed.Mutable as UMVector
 
 import Data.Text.AhoCorasick.Automaton (Next (..))
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), lengthUtf16, lowerCodeUnit, unsafeIndexUtf16)
+import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (..), Text)
+
+import qualified Data.Text.Utf8 as Utf8
 
 -- | A Boyer-Moore automaton is based on lookup-tables that allow skipping through the haystack.
 -- This allows for sub-linear matching in some cases, as we do not have to look at every input
@@ -87,36 +86,46 @@ instance AE.ToJSON Automaton where
 buildAutomaton :: Text -> Automaton
 buildAutomaton pattern = Automaton (hashed pattern) (buildSuffixTable pattern) (buildBadCharTable pattern)
 
-runWithCase
-  :: forall a
-  .  CaseSensitivity
-  -> a
+-- | Finds all matches in the text, calling the match callback with the *first*
+-- matched character of each match of the pattern.
+--
+-- NOTE: This is unlike Aho-Corasick, which reports the index of the character
+-- right after a match.
+--
+-- NOTE: In the UTF-16 version of this module, there is a function 'Data.Text.BoyerMoore.Automaton.runLower'
+-- which does lower-case matching. This function does not exist for the UTF-8 version since it is very
+-- tricky to skip code points going backwards without preprocessing the whole input first.
+--
+-- NOTE: To get full advantage of inlining this function, you probably want to
+-- compile the compiling module with -fllvm and the same optimization flags as
+-- this module.
+runText  :: forall a
+  . a
   -> (a -> CodeUnitIndex -> Next a)
   -> Automaton
   -> Text
   -> a
-{-# INLINE runWithCase #-}
-runWithCase caseSensitivity seed f automaton text
+{-# INLINE runText #-}
+runText seed f automaton text
   | patLen == 0 = seed
   | otherwise = go seed (patLen - 1)
   where
     Automaton patternHashed suffixTable badCharTable = automaton
-    pattern = unhashed patternHashed
-    patLen = lengthUtf16 pattern
-    stringLen = lengthUtf16 text
+    -- Use needle as identifier since pattern is potentially a keyword
+    needle = unhashed patternHashed
+    patLen = Utf8.lengthUtf8 needle
+    stringLen = Utf8.lengthUtf8 text
 
-    inputCasedAt = case caseSensitivity of
-      CaseSensitive -> indexCodePoint text
-      IgnoreCase -> lowerCodeUnit . indexCodePoint text
+    codeUnitAt = Utf8.unsafeIndexCodeUnit text
 
+    {-# INLINE go #-}
     go result haystackIndex
       | haystackIndex < stringLen = matchLoop result haystackIndex (patLen - 1)
       | otherwise = result
-    {-# INLINE go #-}
 
     -- Compare the needle back-to-front with the haystack
     matchLoop result haystackIndex needleIndex
-      | needleIndex >= 0 && inputCasedAt haystackIndex == indexCodePoint pattern needleIndex =
+      | needleIndex >= 0 && codeUnitAt haystackIndex == Utf8.unsafeIndexCodeUnit needle needleIndex =
         -- Characters match, try the pair before
         matchLoop result (haystackIndex - 1) (needleIndex - 1)
       -- We found a match (all needle characters matched)
@@ -136,42 +145,15 @@ runWithCase caseSensitivity seed f automaton text
           -- is lined up with it's rightmost occurrence in the needle.
           -- Note: we could end up left of were we started, essentially never making progress,
           -- if we were to use this rule alone.
-          badCharSkip = badCharLookup badCharTable (inputCasedAt haystackIndex)
+          badCharSkip = badCharLookup badCharTable (codeUnitAt haystackIndex)
           suffixSkip = suffixLookup suffixTable needleIndex
           skip = max badCharSkip suffixSkip
         in
           go result (haystackIndex + skip)
 
--- | Finds all matches in the text, calling the match callback with the *first*
--- matched character of each match of the pattern.
---
--- NOTE: This is unlike Aho-Corasick, which reports the index of the character
--- right after a match.
---
--- NOTE: To get full advantage of inlining this function, you probably want to
--- compile the compiling module with -fllvm and the same optimization flags as
--- this module.
-{-# INLINE runText #-}
-runText :: forall a. a -> (a -> CodeUnitIndex -> Next a) -> Automaton -> Text -> a
-runText = runWithCase CaseSensitive
-
--- | Finds all matches in the lowercased text. This function lowercases the text
--- on the fly to avoid allocating a second lowercased text array. Lowercasing is
--- applied to individual code units, so the indexes into the lowercased text can
--- be used to index into the original text. It is still the responsibility of
--- the caller to lowercase the needles. Needles that contain uppercase code
--- points will not match.
---
--- NOTE: To get full advantage of inlining this function, you probably want to
--- compile the compiling module with -fllvm and the same optimization flags as
--- this module.
-{-# INLINE runLower #-}
-runLower :: forall a. a -> (a -> CodeUnitIndex -> Next a) -> Automaton -> Text -> a
-runLower = runWithCase IgnoreCase
-
--- | Length of the matched pattern measured in Utf16 code units.
+-- | Length of the matched pattern measured in UTF-8 code units (bytes).
 patternLength :: Automaton -> CodeUnitIndex
-patternLength = lengthUtf16 . patternText
+patternLength = Utf8.lengthUtf8 . patternText
 
 -- | Return the pattern that was used to construct the automaton.
 patternText :: Automaton -> Text
@@ -190,7 +172,7 @@ suffixLookup (SuffixTable table) = CodeUnitIndex . indexTable table . codeUnitIn
 
 buildSuffixTable :: Text -> SuffixTable
 buildSuffixTable pattern = runST $ do
-  let patLen = lengthUtf16 pattern
+  let patLen = Utf8.lengthUtf8 pattern
 
   table <- UMVector.new $ codeUnitIndex patLen
 
@@ -230,7 +212,7 @@ buildSuffixTable pattern = runST $ do
       | p < patLen - 1 = do
         let
           suffixLen = suffixLength pattern p
-        when (indexCodePoint pattern (p - suffixLen) /= indexCodePoint pattern (patLen - 1 - suffixLen)) $
+        when (Utf8.unsafeIndexCodeUnit pattern (p - suffixLen) /= Utf8.unsafeIndexCodeUnit pattern (patLen - 1 - suffixLen)) $
           UMVector.write table (codeUnitIndex $ patLen - 1 - suffixLen) (codeUnitIndex $ patLen - 1 - p + suffixLen)
         init2 (p + 1)
       | otherwise = pure ()
@@ -245,38 +227,36 @@ buildSuffixTable pattern = runST $ do
 -- in the input string. For example, if there's a character that is not contained in the pattern at
 -- all, we can skip ahead until after that character.
 data BadCharTable = BadCharTable
-  { badCharTableAscii :: {-# UNPACK #-} !(UVector.Vector Int)
+  { badCharTableEntries :: {-# UNPACK #-} !(UVector.Vector Int)
     -- ^ The element type should be CodeUnitIndex, but there's no unboxed vector for that type, and
     -- defining it would be a lot of boilerplate.
-  , badCharTableNonAscii :: !(HashMap.HashMap CodeUnit CodeUnitIndex)
   , badCharTablePatternLen :: CodeUnitIndex
   }
   deriving stock (Generic, Show)
   deriving anyclass (NFData)
 
 -- | Number of entries in the fixed-size lookup-table of the bad char table.
-asciiCount :: Int
-{-# INLINE asciiCount #-}
-asciiCount = 128
+badcharTableSize :: Int
+{-# INLINE badcharTableSize #-}
+badcharTableSize = 256
 
 -- | Lookup an entry in the bad char table.
 badCharLookup :: BadCharTable -> CodeUnit -> CodeUnitIndex
 {-# INLINE badCharLookup #-}
-badCharLookup (BadCharTable asciiTable nonAsciis patLen) char
-  | intChar < asciiCount = CodeUnitIndex $ indexTable asciiTable intChar
-  | otherwise = HashMap.lookupDefault patLen char nonAsciis
+badCharLookup (BadCharTable asciiTable _patLen) char = CodeUnitIndex $ indexTable asciiTable intChar
   where
     intChar = fromIntegral char
 
 -- | True if the suffix of the @pattern@ starting from @pos@ is a prefix of the pattern
 -- For example, @isPrefix \"aabbaa\" 4 == True@.
 isPrefix :: Text -> CodeUnitIndex -> Bool
-isPrefix pattern pos = go 0
+isPrefix needle pos = go 0
   where
-    suffixLen = lengthUtf16 pattern - pos
+    suffixLen = Utf8.lengthUtf8 needle - pos
     go i
       | i < suffixLen =
-        if indexCodePoint pattern i == indexCodePoint pattern (pos + i)
+        -- FIXME: Check whether implementing the linter warning kills tco
+        if Utf8.unsafeIndexCodeUnit needle i == Utf8.unsafeIndexCodeUnit needle (pos + i)
           then go (i + 1)
           else False
       | otherwise = True
@@ -287,18 +267,18 @@ isPrefix pattern pos = go 0
 suffixLength :: Text -> CodeUnitIndex -> CodeUnitIndex
 suffixLength pattern pos = go 0
   where
-    patLen = lengthUtf16 pattern
+    patLen = Utf8.lengthUtf8 pattern
     go i
-      | indexCodePoint pattern (pos - i) == indexCodePoint pattern (patLen - 1 - i) && i < pos = go (i + 1)
+      | Utf8.unsafeIndexCodeUnit pattern (pos - i) == Utf8.unsafeIndexCodeUnit pattern (patLen - 1 - i) && i < pos = go (i + 1)
       | otherwise = i
 
 buildBadCharTable :: Text -> BadCharTable
 buildBadCharTable pattern = runST $ do
-  let patLen = lengthUtf16 pattern
+  let patLen = Utf8.lengthUtf8 pattern
 
   -- Initialize table with the maximum skip distance, which is the length of the pattern.
   -- This applies to all characters that are not part of the pattern.
-  asciiTable <- UMVector.replicate asciiCount $ codeUnitIndex patLen
+  asciiTable <- UMVector.replicate badcharTableSize $ codeUnitIndex patLen
 
   let
     -- Fill the bad character table based on the rightmost occurrence of a character in the pattern.
@@ -329,26 +309,20 @@ buildBadCharTable pattern = runST $ do
 
     --    Haystack: aaadddabcdbb
     --    Pattern:     adcd
-    fillTable !i !nonAsciis
+    fillTable !i
       -- for(i = 0; i < patLen - 1; i++) {
       | i < patLen - 1 = do
-        let patChar = indexCodePoint pattern i
-        if fromIntegral patChar < asciiCount
-          then do
-            UMVector.write asciiTable (fromIntegral patChar) (codeUnitIndex $ patLen - 1 - i)
-            fillTable (i + 1) nonAsciis
-          else
-            fillTable (i + 1) (HashMap.insert patChar (patLen - 1 - i) nonAsciis)
-      -- }
-      | otherwise = pure nonAsciis
+        let patChar = Utf8.unsafeIndexCodeUnit pattern i
+        UMVector.write asciiTable (fromIntegral patChar) (codeUnitIndex $ patLen - 1 - i)
+        fillTable (i + 1)
+      | otherwise = pure ()
 
-  nonAsciis <- fillTable 0 HashMap.empty
+  fillTable 0
 
   asciiTableFrozen <- UVector.unsafeFreeze asciiTable
 
   pure BadCharTable
-    { badCharTableAscii = asciiTableFrozen
-    , badCharTableNonAscii = nonAsciis
+    { badCharTableEntries = asciiTableFrozen
     , badCharTablePatternLen = patLen
     }
 
@@ -359,11 +333,3 @@ buildBadCharTable pattern = runST $ do
 indexTable :: UVector.Unbox a => UVector.Vector a -> Int -> a
 {-# INLINE indexTable #-}
 indexTable = (UVector.!) -- UVector.unsafeIndex
-
-
--- | Read from a lookup table at the specified index.
-indexCodePoint :: Text -> CodeUnitIndex -> CodeUnit
-{-# INLINE indexCodePoint #-}
-indexCodePoint text index
-  | index < 0 || index >= lengthUtf16 text = error $ "Index out of bounds " ++ show index
-  | otherwise = unsafeIndexUtf16 text index

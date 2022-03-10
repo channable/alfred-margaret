@@ -16,15 +16,18 @@ module Data.Text.Utf8
     , CodeUnit
     , CodeUnitIndex (..)
     , Data.Text.Utf8.concat
+    , Data.Text.Utf8.dropWhile
     , Data.Text.Utf8.null
     , Data.Text.Utf8.readFile
+    , Data.Text.Utf8.replicate
     , Text (..)
     , decode2
     , decode3
     , decode4
     , decodeUtf8
-    , indexTextArray
+    , indices
     , lengthUtf8
+    , lowerCodePoint
     , lowerUtf8
     , pack
     , stringToByteArray
@@ -32,9 +35,18 @@ module Data.Text.Utf8
     , unicode2utf8
     , unpack
     , unpackUtf8
+      -- * Indexing
+      --
+      -- $indexing
+    , indexCodeUnit
+    , unsafeIndexCodePoint
+    , unsafeIndexCodePoint'
+    , unsafeIndexCodeUnit
+    , unsafeIndexCodeUnit'
       -- * Slicing Functions
       --
       -- $slicingFunctions
+    , isInfixOf
     , unsafeCutUtf8
     , unsafeSliceUtf8
     ) where
@@ -61,6 +73,7 @@ import qualified Data.Char as Char
 import qualified Data.Text as T
 
 type CodeUnit = Word8
+-- TODO: Turn 'CodePoint' into a 'Char'. It makes more sense and GHC should be able to unbox it just the same.
 type CodePoint = Int
 
 data Text
@@ -127,10 +140,12 @@ unpackUtf8 :: Text -> [CodeUnit]
 unpackUtf8 (Text u8data offset length) =
   let
     go _ 0 = []
-    go i n = indexTextArray u8data i : go (i + 1) (n - 1)
+    go i n = unsafeIndexCodeUnit' u8data (CodeUnitIndex i) : go (i + 1) (n - 1)
   in
     go offset length
 
+-- | The return value of this function is not really an index.
+-- However the signature is supposed to make it clear that the length is returned in terms of code units, not code points.
 lengthUtf8 :: Text -> CodeUnitIndex
 lengthUtf8 (Text _ _ !length) = CodeUnitIndex length
 
@@ -143,15 +158,75 @@ decodeUtf8 (cu0 : cu1 : cu2 : cus) | cu0 < 0xf0 = decode3 cu0 cu1 cu2 : decodeUt
 decodeUtf8 (cu0 : cu1 : cu2 : cu3 : cus) = decode4 cu0 cu1 cu2 cu3 : decodeUtf8 cus
 decodeUtf8 cus = error $ "Invalid UTF-8 input sequence at " ++ show (take 4 cus)
 
-{-# INLINE indexTextArray #-}
-indexTextArray :: ByteArray -> Int -> CodeUnit
-indexTextArray = indexByteArray
-
 -- TODO: Slow placeholder implementation until we can use text-2.0
 pack :: String -> Text
 pack = go . stringToByteArray
   where
     go !arr = Text arr 0 $ sizeofByteArray arr
+
+-- TODO: Slow placeholder implementation until we can use text-2.0
+replicate :: Int -> Text -> Text
+replicate n = pack . Prelude.concat . Prelude.replicate n . unpack
+
+-- | Convert a 'Text' value into a 'T.Text' value.
+toUtf16Text :: Text -> T.Text
+toUtf16Text (Text u8data off len) =
+  T.unfoldr go 0
+  where
+    go i
+      | i >= len = Nothing
+      | otherwise =
+        let
+          (codeUnits, codePoint) = unsafeIndexCodePoint' u8data (CodeUnitIndex $ off + i)
+        in
+          Just (Char.chr codePoint, i + codeUnits)
+
+-- TODO: Slow placeholder implementation until we can use text-2.0
+isInfixOf :: Text -> Text -> Bool
+isInfixOf needle haystack = T.isInfixOf (toUtf16Text needle) (toUtf16Text haystack)
+
+-- TODO: Naive string search, replace once we have text-2.0
+-- We can't use Data.Text.Internal.Search here because that one reports UTF-16 code unit indices.
+-- Complexity: O(n*m)
+indices :: Text -> Text -> [Int]
+indices needle haystack
+  | needleLen == 0 = []
+  | otherwise = go 0 0
+  where
+    CodeUnitIndex needleLen = lengthUtf8 needle
+    CodeUnitIndex haystackLen = lengthUtf8 haystack
+
+    go startIdx needleIdx
+      -- needle is longer than remaining haystack
+      | startIdx + needleLen > haystackLen = []
+      -- whole needle matched
+      | needleIdx >= needleLen = startIdx : go (startIdx + needleLen) 0
+      -- charachter mismatch
+      | needleCp /= haystackCp = go (startIdx + 1) 0
+      -- advance
+      | otherwise = go startIdx $ needleIdx + codeUnits
+      where
+        (codeUnits, needleCp) = unsafeIndexCodePoint needle $ CodeUnitIndex needleIdx
+        (_, haystackCp) = unsafeIndexCodePoint haystack $ CodeUnitIndex $ startIdx + needleIdx
+
+dropWhile :: (Char -> Bool) -> Text -> Text
+dropWhile predicate text =
+  let
+    len = codeUnitIndex (lengthUtf8 text)
+    go i
+      | i >= len = i
+      | otherwise =
+        let
+          (codeUnits, codePoint) = unsafeIndexCodePoint text $ CodeUnitIndex i
+        in
+          if predicate $ Char.chr codePoint then
+            go $ i + codeUnits
+          else
+            i
+
+    prefixEnd = go 0
+  in
+    unsafeSliceUtf8 (CodeUnitIndex prefixEnd) (CodeUnitIndex $ len - prefixEnd) text
 
 stringToByteArray :: String -> ByteArray
 stringToByteArray = byteArrayFromList . concatMap char2utf8
@@ -222,6 +297,61 @@ toLowerAscii cp
 {-# INLINE lowerUtf8 #-}
 lowerUtf8 :: Text -> Text
 lowerUtf8 = pack . map Char.toLower . unpack
+
+asciiCount :: Int
+asciiCount = 128
+
+{-# INLINE lowerCodePoint #-}
+-- | Lower-Case a UTF-8 codepoint.
+-- Uses 'toLowerAscii' for ASCII and 'Char.toLower' otherwise.
+lowerCodePoint :: Int -> Int
+lowerCodePoint cp
+  | cp < asciiCount = toLowerAscii cp
+  | otherwise = Char.ord $ Char.toLower $ Char.chr cp
+
+-- $indexing
+--
+-- 'Text' can be indexed by code units or code points.
+-- A 'CodePoint' is a 21-bit Unicode code point and can consist of up to four code units.
+-- A 'CodeUnit' is a single byte.
+
+-- | Decode a code point at the given 'CodeUnitIndex'.
+-- Returns garbage if there is no valid code point at that position.
+-- Does not perform bounds checking.
+-- See 'decode2', 'decode3' and 'decode4' for the expected format of multi-byte code points.
+{-# INLINE unsafeIndexCodePoint' #-}
+unsafeIndexCodePoint' :: ByteArray -> CodeUnitIndex -> (Int, CodePoint)
+unsafeIndexCodePoint' !u8data (CodeUnitIndex !idx)
+  | cu0 < 0xc0 = (1, fromIntegral cu0)
+  | cu0 < 0xe0 = (2, decode2 cu0 (cuAt 1))
+  | cu0 < 0xf0 = (3, decode3 cu0 (cuAt 1) (cuAt 2))
+  | otherwise = (4, decode4 cu0 (cuAt 1) (cuAt 2) (cuAt 3))
+  where
+    cuAt !i = unsafeIndexCodeUnit' u8data $ CodeUnitIndex $ idx + i
+    !cu0 = cuAt 0
+
+-- | Does exactly the same thing as 'unsafeIndexCodePoint'', but on 'Text' values.
+{-# INLINE unsafeIndexCodePoint #-}
+unsafeIndexCodePoint :: Text -> CodeUnitIndex -> (Int, CodePoint)
+unsafeIndexCodePoint (Text !u8data !off !_len) (CodeUnitIndex !index) =
+  unsafeIndexCodePoint' u8data $ CodeUnitIndex $ off + index
+
+-- | Get the code unit at the given 'CodeUnitIndex'.
+-- Performs bounds checking.
+{-# INLINE indexCodeUnit #-}
+indexCodeUnit :: Text -> CodeUnitIndex -> CodeUnit
+indexCodeUnit !text (CodeUnitIndex !index)
+  | index < 0 || index >= codeUnitIndex (lengthUtf8 text) = error $ "Index out of bounds " ++ show index
+  | otherwise = unsafeIndexCodeUnit text $ CodeUnitIndex index
+
+{-# INLINE unsafeIndexCodeUnit' #-}
+unsafeIndexCodeUnit' :: ByteArray -> CodeUnitIndex -> CodeUnit
+unsafeIndexCodeUnit' !u8data (CodeUnitIndex !idx) = indexByteArray u8data idx
+
+{-# INLINE unsafeIndexCodeUnit #-}
+unsafeIndexCodeUnit :: Text -> CodeUnitIndex -> CodeUnit
+unsafeIndexCodeUnit (Text !u8data !off !_len) (CodeUnitIndex !index) =
+  unsafeIndexCodeUnit' u8data $ CodeUnitIndex $ off + index
 
 -- $slicingFunctions
 --

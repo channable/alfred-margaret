@@ -1,4 +1,6 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
 module Data.Text.Utf8.Utf8Spec where
 
 import Control.Monad (forM_)
@@ -8,6 +10,7 @@ import Test.QuickCheck (Arbitrary (arbitrary), choose)
 
 import qualified Data.Char as Char
 
+import Data.Text.Orphans ()
 import Data.Text.Utf8 (stringToByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
@@ -39,13 +42,23 @@ spec = do
             forM_ [0..0x7f] $ flip shouldSatisfy $ \cp ->
                 mapCp Char.toLower cp == Utf8.toLowerAscii cp
 
+    describe "lowerCodePoint" $ do
+
+        prop "is equivalent to Char.toLower on all of Unicode" $ \c ->
+            Utf8.lowerCodePoint (Char.ord c) `shouldBe` Char.ord (Char.toLower c)
+
+    describe "dropWhile" $ do
+
+        it "handles a simple example well" $ do
+            Utf8.dropWhile (== 'b') "bbba" `shouldBe` "a"
+
     describe "slicing functions" $ do
 
         it "satisfies the example in Data.Text.Utf8" $ do
             let begin = Utf8.CodeUnitIndex 2
-            let length_   = Utf8.CodeUnitIndex 6
-            Utf8.unsafeSliceUtf8 begin length_ slicingExample `shouldBe` Utf8.pack "DEFGHI"
-            Utf8.unsafeCutUtf8 begin length_ slicingExample `shouldBe` (Utf8.pack "BC", Utf8.pack "JKL")
+            let length_ = Utf8.CodeUnitIndex 6
+            Utf8.unsafeSliceUtf8 begin length_ slicingExample `shouldBe` "DEFGHI"
+            Utf8.unsafeCutUtf8 begin length_ slicingExample `shouldBe` ("BC", "JKL")
 
         prop "unsafeSliceUtf8 and unsafeCutUtf8 are complementary" $ \ (SlicingExampleIndices begin length_ :: SlicingExampleIndices) -> do
             let (prefix, suffix) = Utf8.unsafeCutUtf8 begin length_ slicingExample
