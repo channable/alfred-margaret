@@ -39,18 +39,19 @@ import Control.Monad (when)
 import Control.Monad.ST (runST)
 import Data.Hashable (Hashable (..), Hashed, hashed, unhashed)
 import Data.Text.Internal (Text (..))
+import Data.TypedByteArray (Prim, TypedByteArray)
 import GHC.Generics (Generic)
 
 #if defined(HAS_AESON)
 import qualified Data.Aeson as AE
 #endif
 import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Vector.Unboxed as UVector
-import qualified Data.Vector.Unboxed.Mutable as UMVector
 
 import Data.Text.AhoCorasick.Automaton (Next (..))
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), lengthUtf16, lowerCodeUnit, unsafeIndexUtf16)
+
+import qualified Data.TypedByteArray as TBA
 
 -- | A Boyer-Moore automaton is based on lookup-tables that allow skipping through the haystack.
 -- This allows for sub-linear matching in some cases, as we do not have to look at every input
@@ -179,7 +180,7 @@ patternText (Automaton pattern _ _) = unhashed pattern
 
 -- | The suffix table tells us for each character of the pattern how many characters we can
 -- jump ahead if the match fails at that point.
-newtype SuffixTable = SuffixTable (UVector.Vector Int)
+newtype SuffixTable = SuffixTable (TypedByteArray Int)
   deriving stock (Generic, Show)
   deriving anyclass (NFData)
 
@@ -192,7 +193,7 @@ buildSuffixTable :: Text -> SuffixTable
 buildSuffixTable pattern = runST $ do
   let patLen = lengthUtf16 pattern
 
-  table <- UMVector.new $ codeUnitIndex patLen
+  table <- TBA.newTypedByteArray $ codeUnitIndex patLen
 
   let
     -- Case 1: For each position of the pattern we record the shift that would align the pattern so
@@ -218,7 +219,7 @@ buildSuffixTable pattern = runST $ do
           prefixIndex
             | isPrefix pattern (p + 1) = p + 1
             | otherwise = lastPrefixIndex
-        UMVector.write table (codeUnitIndex p) (codeUnitIndex $ prefixIndex + patLen - 1 - p)
+        TBA.writeTypedByteArray table (codeUnitIndex p) (codeUnitIndex $ prefixIndex + patLen - 1 - p)
         init1 prefixIndex (p - 1)
       | otherwise = pure ()
 
@@ -231,21 +232,21 @@ buildSuffixTable pattern = runST $ do
         let
           suffixLen = suffixLength pattern p
         when (indexCodePoint pattern (p - suffixLen) /= indexCodePoint pattern (patLen - 1 - suffixLen)) $
-          UMVector.write table (codeUnitIndex $ patLen - 1 - suffixLen) (codeUnitIndex $ patLen - 1 - p + suffixLen)
+          TBA.writeTypedByteArray table (codeUnitIndex $ patLen - 1 - suffixLen) (codeUnitIndex $ patLen - 1 - p + suffixLen)
         init2 (p + 1)
       | otherwise = pure ()
 
   init1 (patLen - 1) (patLen - 1)
   init2 0
 
-  SuffixTable <$> UVector.unsafeFreeze table
+  SuffixTable <$> TBA.unsafeFreezeTypedByteArray table
 
 
 -- | The bad char table tells us how far we may skip ahead when encountering a certain character
 -- in the input string. For example, if there's a character that is not contained in the pattern at
 -- all, we can skip ahead until after that character.
 data BadCharTable = BadCharTable
-  { badCharTableAscii :: {-# UNPACK #-} !(UVector.Vector Int)
+  { badCharTableAscii :: {-# UNPACK #-} !(TypedByteArray Int)
     -- ^ The element type should be CodeUnitIndex, but there's no unboxed vector for that type, and
     -- defining it would be a lot of boilerplate.
   , badCharTableNonAscii :: !(HashMap.HashMap CodeUnit CodeUnitIndex)
@@ -298,7 +299,7 @@ buildBadCharTable pattern = runST $ do
 
   -- Initialize table with the maximum skip distance, which is the length of the pattern.
   -- This applies to all characters that are not part of the pattern.
-  asciiTable <- UMVector.replicate asciiCount $ codeUnitIndex patLen
+  asciiTable <- TBA.replicate asciiCount $ codeUnitIndex patLen
 
   let
     -- Fill the bad character table based on the rightmost occurrence of a character in the pattern.
@@ -335,7 +336,7 @@ buildBadCharTable pattern = runST $ do
         let patChar = indexCodePoint pattern i
         if fromIntegral patChar < asciiCount
           then do
-            UMVector.write asciiTable (fromIntegral patChar) (codeUnitIndex $ patLen - 1 - i)
+            TBA.writeTypedByteArray asciiTable (fromIntegral patChar) (codeUnitIndex $ patLen - 1 - i)
             fillTable (i + 1) nonAsciis
           else
             fillTable (i + 1) (HashMap.insert patChar (patLen - 1 - i) nonAsciis)
@@ -344,7 +345,7 @@ buildBadCharTable pattern = runST $ do
 
   nonAsciis <- fillTable 0 HashMap.empty
 
-  asciiTableFrozen <- UVector.unsafeFreeze asciiTable
+  asciiTableFrozen <- TBA.unsafeFreezeTypedByteArray asciiTable
 
   pure BadCharTable
     { badCharTableAscii = asciiTableFrozen
@@ -356,9 +357,9 @@ buildBadCharTable pattern = runST $ do
 -- Helper functions for easily toggling the safety of this module
 
 -- | Read from a lookup table at the specified index.
-indexTable :: UVector.Unbox a => UVector.Vector a -> Int -> a
+indexTable :: Prim a => TypedByteArray a -> Int -> a
 {-# INLINE indexTable #-}
-indexTable = (UVector.!) -- UVector.unsafeIndex
+indexTable = TBA.unsafeIndex
 
 
 -- | Read from a lookup table at the specified index.
