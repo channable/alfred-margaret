@@ -49,6 +49,7 @@ import Data.IntMap.Strict (IntMap)
 import Data.Word (Word32, Word64)
 import GHC.Generics (Generic)
 
+import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import qualified Data.Vector as Vector
@@ -125,7 +126,7 @@ wildcard = 0x200000
 -- | Extract the code unit from a transition. The special wildcard transition
 -- will return 0.
 transitionCodeUnit :: Transition -> CodePoint
-transitionCodeUnit t = fromIntegral (t .&. 0x1fffff)
+transitionCodeUnit t = Char.chr $ fromIntegral (t .&. 0x1fffff)
 
 -- | Extract the goto state from a transition.
 transitionState :: Transition -> State
@@ -139,7 +140,7 @@ transitionIsWildcard t = (t .&. wildcard) == wildcard
 newTransition :: CodePoint -> State -> Transition
 newTransition input state =
   let
-    input64 = fromIntegral input :: Word64
+    input64 = fromIntegral $ Char.ord input :: Word64
     state64 = fromIntegral state :: Word64
   in
     (state64 `shiftL` 32) .|. input64
@@ -179,7 +180,7 @@ build needlesWithValues =
     -- Convert the map of transitions, and the map of fallback states, into a
     -- list of transition lists, where every transition list is terminated by
     -- a wildcard transition to the fallback state.
-    prependTransition ts input state = newTransition (fromIntegral input) state : ts
+    prependTransition ts input state = newTransition (Char.chr input) state : ts
     makeTransitions fallback ts = IntMap.foldlWithKey' prependTransition [newWildcardTransition fallback] ts
     transitionsList = zipWith makeTransitions (IntMap.elems fallbackMap) (IntMap.elems transitionMap)
 
@@ -264,7 +265,7 @@ buildTransitionMap' =
       let
         transitionsFromState = transitions IntMap.! state
       in
-        case IntMap.lookup (fromIntegral input) transitionsFromState of
+        case IntMap.lookup (Char.ord input) transitionsFromState of
           Just nextState ->
             go nextState (numStates, transitions, values) (needleTail, vs)
           Nothing ->
@@ -272,7 +273,7 @@ buildTransitionMap' =
               -- Allocate a new state, and insert a transition to it.
               -- Also insert an empty transition map for it.
               nextState = numStates
-              transitionsFromState' = IntMap.insert (fromIntegral input) nextState transitionsFromState
+              transitionsFromState' = IntMap.insert (Char.ord input) nextState transitionsFromState
               transitions'
                 = IntMap.insert state transitionsFromState'
                 $ IntMap.insert nextState IntMap.empty transitions
@@ -299,7 +300,7 @@ asciiCount = 128
 buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
 buildAsciiTransitionLookupTable transitions = TBA.generate asciiCount $ \i ->
   case IntMap.lookup i transitions of
-    Just state -> newTransition (fromIntegral i) state
+    Just state -> newTransition (Char.chr i) state
     Nothing    -> newWildcardTransition 0
 
 -- | Traverse the state trie in breadth-first order.
@@ -475,7 +476,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     {-# INLINE followCodePoint #-}
     followCodePoint :: Int -> Int -> a -> CodePoint -> State -> a
     followCodePoint !offset !remaining !acc !cp !state
-      | state == initialState && cp < asciiCount = lookupRootAsciiTransition offset remaining acc cp
+      | state == initialState && Char.ord cp < asciiCount = lookupRootAsciiTransition offset remaining acc cp
       | otherwise = lookupTransition offset remaining acc cp state $ offsets `uAt` state
 
     -- NOTE: This function can't be inlined since it is self-recursive.
@@ -510,7 +511,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
       | transitionIsWildcard t = consumeInput offset remaining acc initialState
       -- Transition matched!
       | otherwise = collectMatches offset remaining acc $ transitionState t
-      where !t = rootAsciiTransitions `uAt` fromIntegral cp
+      where !t = rootAsciiTransitions `uAt` Char.ord cp
 
     {-# NOINLINE collectMatches #-}
     collectMatches !offset !remaining !acc !state =

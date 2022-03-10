@@ -33,19 +33,19 @@ spec = do
 
             it "is idempotent" $ do
                 forM_ bmpCodepoints $ flip shouldSatisfy $ \cp ->
-                    mapCp Char.toLower cp == mapCp (Char.toLower . Char.toLower) cp
+                    Char.toLower cp == Char.toLower (Char.toLower cp)
 
     describe "toLowerAscii" $ do
 
         it "is equivalent to Char.toLower on ASCII" $ do
 
-            forM_ [0..0x7f] $ flip shouldSatisfy $ \cp ->
-                mapCp Char.toLower cp == Utf8.toLowerAscii cp
+            forM_ asciiCodepoints $ flip shouldSatisfy $ \cp ->
+                Char.toLower cp == Utf8.toLowerAscii cp
 
     describe "lowerCodePoint" $ do
 
         prop "is equivalent to Char.toLower on all of Unicode" $ \c ->
-            Utf8.lowerCodePoint (Char.ord c) `shouldBe` Char.ord (Char.toLower c)
+            Utf8.lowerCodePoint c `shouldBe` Char.toLower c
 
     describe "dropWhile" $ do
 
@@ -83,13 +83,13 @@ instance Arbitrary SlicingExampleIndices where
 
         where unCodeUnitIndex (Utf8.CodeUnitIndex i) = i
 
+asciiCodepoints :: [Char]
+asciiCodepoints = map Char.chr [0..0x7f]
+
 -- | The Basic Multilingual Plane (BMP) contains the Unicode code points
 -- 0x0000 through 0xFFFF.
-bmpCodepoints :: [Int]
-bmpCodepoints = [0..0xffff]
-
-mapCp :: (Char -> Char) -> Int -> Int
-mapCp f = Char.ord . f . Char.chr
+bmpCodepoints :: [Char]
+bmpCodepoints = map Char.chr [0..0xffff]
 
 commonSuffix :: Eq a => [a] -> [a] -> [a]
 commonSuffix list list' = reverse $ go (reverse list) (reverse list')

@@ -73,8 +73,7 @@ import qualified Data.Char as Char
 import qualified Data.Text as T
 
 type CodeUnit = Word8
--- TODO: Turn 'CodePoint' into a 'Char'. It makes more sense and GHC should be able to unbox it just the same.
-type CodePoint = Int
+type CodePoint = Char
 
 data Text
   -- | A placeholder data type for UTF-8 encoded text until we can use text-2.0.
@@ -126,7 +125,7 @@ newtype CodeUnitIndex = CodeUnitIndex
 
 -- TODO: Slow placeholder implementation until we can use text-2.0
 unpack :: Text -> String
-unpack = map Char.chr . decodeUtf8 . unpackUtf8
+unpack = decodeUtf8 . unpackUtf8
 
 -- TODO: Slow placeholder implementation until we can use text-2.0
 concat :: [Text] -> Text
@@ -152,10 +151,10 @@ lengthUtf8 (Text _ _ !length) = CodeUnitIndex length
 -- | Decode a list of UTF-8 code units into a list of code points.
 decodeUtf8 :: [CodeUnit] -> [CodePoint]
 decodeUtf8 [] = []
-decodeUtf8 (cu0 : cus) | cu0 < 0xc0 = fromIntegral cu0 : decodeUtf8 cus
-decodeUtf8 (cu0 : cu1 : cus) | cu0 < 0xe0 = decode2 cu0 cu1 : decodeUtf8 cus
-decodeUtf8 (cu0 : cu1 : cu2 : cus) | cu0 < 0xf0 = decode3 cu0 cu1 cu2 : decodeUtf8 cus
-decodeUtf8 (cu0 : cu1 : cu2 : cu3 : cus) = decode4 cu0 cu1 cu2 cu3 : decodeUtf8 cus
+decodeUtf8 (cu0 : cus) | cu0 < 0xc0 = Char.chr (fromIntegral cu0) : decodeUtf8 cus
+decodeUtf8 (cu0 : cu1 : cus) | cu0 < 0xe0 = Char.chr (decode2 cu0 cu1) : decodeUtf8 cus
+decodeUtf8 (cu0 : cu1 : cu2 : cus) | cu0 < 0xf0 = Char.chr (decode3 cu0 cu1 cu2) : decodeUtf8 cus
+decodeUtf8 (cu0 : cu1 : cu2 : cu3 : cus) | cu0 < 0xf8 = Char.chr (decode4 cu0 cu1 cu2 cu3) : decodeUtf8 cus
 decodeUtf8 cus = error $ "Invalid UTF-8 input sequence at " ++ show (take 4 cus)
 
 -- TODO: Slow placeholder implementation until we can use text-2.0
@@ -179,7 +178,7 @@ toUtf16Text (Text u8data off len) =
         let
           (codeUnits, codePoint) = unsafeIndexCodePoint' u8data (CodeUnitIndex $ off + i)
         in
-          Just (Char.chr codePoint, i + codeUnits)
+          Just (codePoint, i + codeUnits)
 
 -- TODO: Slow placeholder implementation until we can use text-2.0
 isInfixOf :: Text -> Text -> Bool
@@ -219,7 +218,7 @@ dropWhile predicate text =
         let
           (codeUnits, codePoint) = unsafeIndexCodePoint text $ CodeUnitIndex i
         in
-          if predicate $ Char.chr codePoint then
+          if predicate codePoint then
             go $ i + codeUnits
           else
             i
@@ -288,9 +287,9 @@ decode4 cu0 cu1 cu2 cu3 =
 
 -- | Lower-case the ASCII code points A-Z and leave the rest of ASCII intact.
 {-# INLINE toLowerAscii #-}
-toLowerAscii :: (Ord p, Num p) => p -> p
+toLowerAscii :: Char -> Char
 toLowerAscii cp
-  | cp >= fromIntegral (Char.ord 'A') && cp <= fromIntegral (Char.ord 'Z') = cp + 0x20
+  | Char.isAsciiUpper cp = Char.chr (Char.ord cp + 0x20)
   | otherwise = cp
 
 -- TODO: Slow placeholder implementation until we can use text-2.0
@@ -304,10 +303,10 @@ asciiCount = 128
 {-# INLINE lowerCodePoint #-}
 -- | Lower-Case a UTF-8 codepoint.
 -- Uses 'toLowerAscii' for ASCII and 'Char.toLower' otherwise.
-lowerCodePoint :: Int -> Int
+lowerCodePoint :: Char -> Char
 lowerCodePoint cp
-  | cp < asciiCount = toLowerAscii cp
-  | otherwise = Char.ord $ Char.toLower $ Char.chr cp
+  | Char.ord cp < asciiCount = toLowerAscii cp
+  | otherwise = Char.toLower cp
 
 -- $indexing
 --
@@ -322,10 +321,10 @@ lowerCodePoint cp
 {-# INLINE unsafeIndexCodePoint' #-}
 unsafeIndexCodePoint' :: ByteArray -> CodeUnitIndex -> (Int, CodePoint)
 unsafeIndexCodePoint' !u8data (CodeUnitIndex !idx)
-  | cu0 < 0xc0 = (1, fromIntegral cu0)
-  | cu0 < 0xe0 = (2, decode2 cu0 (cuAt 1))
-  | cu0 < 0xf0 = (3, decode3 cu0 (cuAt 1) (cuAt 2))
-  | otherwise = (4, decode4 cu0 (cuAt 1) (cuAt 2) (cuAt 3))
+  | cu0 < 0xc0 = (1, Char.chr $ fromIntegral cu0)
+  | cu0 < 0xe0 = (2, Char.chr $ decode2 cu0 (cuAt 1))
+  | cu0 < 0xf0 = (3, Char.chr $ decode3 cu0 (cuAt 1) (cuAt 2))
+  | otherwise = (4, Char.chr $ decode4 cu0 (cuAt 1) (cuAt 2) (cuAt 3))
   where
     cuAt !i = unsafeIndexCodeUnit' u8data $ CodeUnitIndex $ idx + i
     !cu0 = cuAt 0
