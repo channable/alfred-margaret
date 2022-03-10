@@ -148,7 +148,7 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
         matchEndPositions "éclair" "éclaireclair" `shouldMatchList` [7]
         matchEndPositions "éclair" "eclairéclair" `shouldMatchList` [13]
 
-      it "reports the correct UTF-16 index for surrogate pairs" $ do
+      it "reports the correct code unit index for complex characters" $ do
         -- Note that the index after the match is 4, even though there is
         -- only a single code point. U+1d11e is encoded as four code units:
         -- in UTF-8:
