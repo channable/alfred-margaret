@@ -15,7 +15,7 @@ import Prelude hiding (replicate)
 import Test.Hspec (Expectation, Spec, describe, it, parallel, shouldBe)
 import Test.Hspec.Expectations (shouldMatchList, shouldSatisfy)
 import Test.Hspec.QuickCheck (modifyMaxSuccess, prop)
-import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink, (==>))
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAllShrink, (==>))
 import Test.QuickCheck.Gen (Gen)
 import Test.QuickCheck.Instances ()
 
@@ -33,6 +33,7 @@ import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Replacer as AhoReplacer
 import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
 import qualified Data.Text.Utf8.BoyerMoore.Replacer as Replacer
+import qualified Data.Text.Utf8.BoyerMoore.Searcher as Searcher
 
 -- | Test that for a single needle which equals the haystack, we find a single
 -- match. Does not apply to the empty needle.
@@ -230,3 +231,23 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
         actual = Replacer.replaceSingleLimited auto replacement haystack maxBound
       in
         actual `shouldBe` Just expected
+
+  describe "Searcher" $ do
+
+    describe "containsAny" $ do
+
+      -- For the edge case where a needle is the empty string,
+      -- 'Text.isInfixOf' and 'Searcher.containsAny' are different:
+      --
+      -- @
+      -- Text.isInfixOf "" "abc" == True /= False == Searcher.containsAny (Searcher.build [""]) "abc"
+      -- @
+      --
+      -- However, at this point we probably shouldn't break this property.
+      prop "is equivalent to disjunction of Text.isInfixOf calls*" $ \ (needles :: [Text]) (haystack :: Text) ->
+        let
+          searcher = Searcher.build needles
+          test needle =
+            not (Text.null needle) && needle `Text.isInfixOf` haystack
+        in
+          Searcher.containsAny searcher haystack `shouldBe` any test needles

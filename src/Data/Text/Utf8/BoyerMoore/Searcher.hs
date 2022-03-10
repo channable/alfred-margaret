@@ -13,21 +13,21 @@ module Data.Text.Utf8.BoyerMoore.Searcher
     , automata
     , build
     , buildWithValues
-    , caseSensitivity
     , containsAny
     , needles
     , numNeedles
-    , setSearcherCaseSensitivity
     ) where
 
 
 import Control.DeepSeq (NFData)
 import Data.Bifunctor (first)
 import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
-import Data.Text (Text)
 import GHC.Generics (Generic)
 
-import Data.Text.BoyerMoore.Automaton (Automaton, CaseSensitivity (..))
+import Data.Text.Utf8 (Text)
+import Data.Text.Utf8.BoyerMoore.Automaton (Automaton)
+
+import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
 
 
 -- | A set of needles with associated values, and Boyer-Moore automata to
@@ -46,8 +46,7 @@ import Data.Text.BoyerMoore.Automaton (Automaton, CaseSensitivity (..))
 --
 -- We also use Hashed to cache the hash of the needles.
 data Searcher v = Searcher
-  { searcherCaseSensitive :: CaseSensitivity
-  , searcherNeedles :: Hashed [(Text, v)]
+  { searcherNeedles :: Hashed [(Text, v)]
   , searcherNumNeedles :: Int
   , searcherAutomata :: [(Automaton, v)]
   } deriving (Generic)
@@ -60,24 +59,22 @@ instance Hashable v => Hashable (Searcher v) where
   {-# INLINE hashWithSalt #-}
 
 instance Eq v => Eq (Searcher v) where
-  Searcher cx xs nx _ == Searcher cy ys ny _ = (cx, nx, xs) == (cy, ny, ys)
+  Searcher xs nx _ == Searcher ys ny _ = (xs, nx) == (ys, ny)
   {-# INLINE (==) #-}
 
 instance NFData v => NFData (Searcher v)
 
--- | Builds the Searcher for a list of needles
--- The caller is responsible that the needles are lower case in case the IgnoreCase
--- is used for case sensitivity
-build :: CaseSensitivity -> [Text] -> Searcher ()
+-- | Builds the Searcher for a list of needles without values.
+-- This is useful for just checking whether the haystack contains the needles.
+build :: [Text] -> Searcher ()
 {-# INLINABLE build #-}
-build case_ = buildWithValues case_ . flip zip (repeat ())
+build = buildWithValues . flip zip (repeat ())
 
--- | The caller is responsible that the needles are lower case in case the IgnoreCase
--- is used for case sensitivity
-buildWithValues :: Hashable v => CaseSensitivity -> [(Text, v)] -> Searcher v
+-- | Builds the Searcher for a list of needles.
+buildWithValues :: Hashable v => [(Text, v)] -> Searcher v
 {-# INLINABLE buildWithValues #-}
-buildWithValues case_ ns =
-  Searcher case_ (hashed ns) (length ns) $ map (first BoyerMoore.buildAutomaton) ns
+buildWithValues ns =
+  Searcher (hashed ns) (length ns) $ map (first BoyerMoore.buildAutomaton) ns
 
 needles :: Searcher v -> [(Text, v)]
 needles = unhashed . searcherNeedles
@@ -88,20 +85,7 @@ automata = searcherAutomata
 numNeedles :: Searcher v -> Int
 numNeedles = searcherNumNeedles
 
-caseSensitivity :: Searcher v -> CaseSensitivity
-caseSensitivity = searcherCaseSensitive
-
--- | Updates the case sensitivity of the searcher. Does not change the
--- capitilization of the needles. The caller should be certain that if IgnoreCase
--- is passed, the needles are already lower case.
-setSearcherCaseSensitivity :: CaseSensitivity -> Searcher v -> Searcher v
-setSearcherCaseSensitivity case_ searcher = searcher{
-    searcherCaseSensitive = case_
-  }
-
-
 -- | Return whether the haystack contains any of the needles.
--- Case sensitivity depends on the properties of the searcher
 -- This function is marked noinline as an inlining boundary. BoyerMoore.runText is
 -- marked inline, so this function will be optimized to report only whether
 -- there is a match, and not construct a list of matches. We don't want this
@@ -116,8 +100,4 @@ containsAny !searcher !text =
     -- On the first match, return True immediately.
     f _acc _match = BoyerMoore.Done True
   in
-    case caseSensitivity searcher of
-      CaseSensitive ->
-        any (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
-      IgnoreCase ->
-        any (\(automaton, ()) -> BoyerMoore.runLower False f automaton text) (automata searcher)
+    any (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
