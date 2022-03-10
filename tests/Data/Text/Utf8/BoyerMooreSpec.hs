@@ -227,6 +227,6 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
 
         auto = BoyerMoore.buildAutomaton needle
 
-        actual = Replacer.replaceSingleLimited CaseSensitive auto replacement haystack maxBound
+        actual = Replacer.replaceSingleLimited auto replacement haystack maxBound
       in
         actual `shouldBe` Just expected

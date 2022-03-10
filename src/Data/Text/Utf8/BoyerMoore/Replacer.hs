@@ -12,7 +12,6 @@ module Data.Text.Utf8.BoyerMoore.Replacer
       replaceSingleLimited
     ) where
 
-import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (Text)
 import Data.Text.Utf8.BoyerMoore.Automaton (Automaton, CodeUnitIndex)
 
@@ -22,19 +21,16 @@ import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
 
 -- | Replace all occurrences matched by the Boyer-Moore automaton
 -- with the given replacement text in some haystack.
+-- Performs case-sensitive replacement.
 replaceSingleLimited
-  :: CaseSensitivity
-  -- ^ In case of 'IgnoreCase', the automaton must have been created with a lower-case needle
-  -> Automaton -- ^ Matches the needles
+  :: Automaton -- ^ Matches the needles
   -> Text -- ^ Replacement string
   -> Text -- ^ Haystack
   -> CodeUnitIndex -- ^ Maximum number of code units in the returned text
   -> Maybe Text
-replaceSingleLimited caseSensitivity needle replacement haystack maxLength
+replaceSingleLimited needle replacement haystack maxLength
   | needleLength == 0 = Just $ if haystackLength == 0 then replacement else haystack
-  | otherwise = finish $ case caseSensitivity of
-      CaseSensitive -> BoyerMoore.runText initial foundMatch needle haystack
-      IgnoreCase -> BoyerMoore.runLower initial foundMatch needle haystack
+  | otherwise = finish $ BoyerMoore.runText initial foundMatch needle haystack
   where
     needleLength = BoyerMoore.patternLength needle
     haystackLength = Utf8.lengthUtf8 haystack

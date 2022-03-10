@@ -28,7 +28,6 @@ module Data.Text.Utf8.BoyerMoore.Automaton
     , buildAutomaton
     , patternLength
     , patternText
-    , runLower
     , runText
     ) where
 
@@ -93,6 +92,10 @@ buildAutomaton pattern = Automaton (hashed pattern) (buildSuffixTable pattern) (
 -- NOTE: This is unlike Aho-Corasick, which reports the index of the character
 -- right after a match.
 --
+-- NOTE: In the UTF-16 version of this module, there is a function 'Data.Text.BoyerMoore.Automaton.runLower'
+-- which does lower-case matching. This function does not exist for the UTF-8 version since it is very
+-- tricky to skip code points going backwards without preprocessing the whole input first.
+--
 -- NOTE: To get full advantage of inlining this function, you probably want to
 -- compile the compiling module with -fllvm and the same optimization flags as
 -- this module.
@@ -147,23 +150,6 @@ runText seed f automaton text
           skip = max badCharSkip suffixSkip
         in
           go result (haystackIndex + skip)
-
-
--- | Finds all matches in the lowercased text. This function lowercases the text
--- on the fly to avoid allocating a second lowercased text array. Lowercasing is
--- applied to individual code units, so the indexes into the lowercased text can
--- be used to index into the original text. It is still the responsibility of
--- the caller to lowercase the needles. Needles that contain uppercase code
--- points will not match.
---
--- NOTE: To get full advantage of inlining this function, you probably want to
--- compile the compiling module with -fllvm and the same optimization flags as
--- this module.
---
--- NOTE: Do not use this function, it is currently unimplemented.
-{-# INLINE runLower #-}
-runLower :: forall a. a -> (a -> CodeUnitIndex -> Next a) -> Automaton -> Text -> a
-runLower = error "unimplemented"
 
 -- | Length of the matched pattern measured in UTF-8 code units (bytes).
 patternLength :: Automaton -> CodeUnitIndex
