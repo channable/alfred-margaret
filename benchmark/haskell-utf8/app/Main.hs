@@ -15,6 +15,8 @@ import Text.Printf (hPrintf)
 import qualified System.Clock as Clock
 import qualified System.Environment as Env
 
+import Data.Text.Utf8 (CodeUnitIndex (CodeUnitIndex))
+
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 
@@ -44,12 +46,12 @@ readNeedleHaystackFile path = do
     go u8data off 0 needles = (reverse needles, Utf8.Text u8data off 0)
     go u8data off len needles
       -- "line starts with newline char" ==> empty line, emit haystack as slice of u8data
-      | Utf8.indexTextArray u8data off == 10 = (reverse needles, Utf8.Text u8data (off + 1) (len - 1))
+      | Utf8.unsafeIndexCodeUnit' u8data (CodeUnitIndex off) == 10 = (reverse needles, Utf8.Text u8data (off + 1) (len - 1))
       | otherwise = consumeNeedle u8data off len needles off
 
     consumeNeedle u8data off len needles needleStart
       -- Newline ==> emit needle as slice of u8data
-      | Utf8.indexTextArray u8data off == 10 = go u8data (off + 1) (len - 1) $ Utf8.Text u8data needleStart (off - needleStart) : needles
+      | Utf8.unsafeIndexCodeUnit' u8data (CodeUnitIndex off) == 10 = go u8data (off + 1) (len - 1) $ Utf8.Text u8data needleStart (off - needleStart) : needles
       | otherwise = consumeNeedle u8data (off + 1) (len - 1) needles needleStart
 
 acBench :: [Utf8.Text] -> Utf8.Text -> IO (Int, Clock.TimeSpec)
