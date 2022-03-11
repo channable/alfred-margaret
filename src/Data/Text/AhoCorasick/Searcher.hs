@@ -11,29 +11,29 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Data.Text.AhoCorasick.Searcher
-  ( Searcher
-  , build
-  , buildWithValues
-  , needles
-  , numNeedles
-  , automaton
-  , caseSensitivity
-  , containsAny
-  , setSearcherCaseSensitivity
-  )
-  where
+    ( Searcher
+    , automaton
+    , build
+    , buildWithValues
+    , caseSensitivity
+    , containsAll
+    , containsAny
+    , needles
+    , numNeedles
+    , setSearcherCaseSensitivity
+    ) where
 
 import Control.DeepSeq (NFData)
 import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
-import Data.Semigroup (Semigroup, (<>))
 import Data.Text (Text)
 import GHC.Generics (Generic)
+
+import qualified Data.IntSet as IS
 
 #if defined(HAS_AESON)
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as AE
 #endif
-
 import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
@@ -152,5 +152,22 @@ containsAny !searcher !text =
     -- On the first match, return True immediately.
     f _acc _match = Aho.Done True
   in case caseSensitivity searcher of
-    CaseSensitive  -> Aho.runText False f (automaton searcher) text
-    IgnoreCase      -> Aho.runLower False f (automaton searcher) text
+    CaseSensitive -> Aho.runText False f (automaton searcher) text
+    IgnoreCase   -> Aho.runLower False f (automaton searcher) text
+
+containsAll :: CaseSensitivity -> [Text] -> Text -> Bool
+containsAll !case_ !ns !haystack =
+  let
+    needleIds = [0..length ns - 1] :: [Int]
+    initial = IS.fromDistinctAscList needleIds
+    ac = Aho.build $ zip (map Utf16.unpackUtf16 ns) needleIds
+
+    f !acc (Aho.Match _index !needleId)
+      | IS.null acc' = Aho.Done acc'
+      | otherwise = Aho.Step acc'
+      where
+        !acc' = IS.delete needleId acc
+
+  in IS.null $ case case_ of
+    CaseSensitive -> Aho.runText initial f ac haystack
+    IgnoreCase   -> Aho.runLower initial f ac haystack

@@ -38,6 +38,7 @@ import Data.Text.Orphans ()
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Replacer as Replacer
+import qualified Data.Text.AhoCorasick.Searcher as Searcher
 import qualified Data.Text.AhoCorasick.Splitter as Splitter
 import qualified Data.Text.Utf16 as Utf16
 
@@ -397,6 +398,18 @@ spec = parallel $ do
         expected = foldl' replaceText haystack replaces
       in
         Replacer.run replacer haystack `shouldBe` expected
+
+  describe "Searcher.containsAll" $ do
+
+    prop "is equivalent to sequential Text.isInfixOf calls" $ \ (needles :: [Text]) (haystack :: Text) ->
+      Searcher.containsAll CaseSensitive needles haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+
+    prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching" $ \ (needles :: [Text]) (haystack :: Text) ->
+      let
+        lowerNeedles = map Text.toLower needles
+        lowerHaystack = Text.toLower haystack
+      in
+      Searcher.containsAll IgnoreCase lowerNeedles haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
 
   describe "Splitter.split" $
 
