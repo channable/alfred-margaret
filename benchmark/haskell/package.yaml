@@ -37,3 +37,12 @@ executables:
     - '"-with-rtsopts=-I0 -T -N -A32m -n4m -qg"'
     main: Main.hs
     source-dirs: app/
+    when:
+    - condition: flag(utf8)
+      cpp-options: -DHAS_UTF8
+
+flags:
+  utf8:
+    description: Use UTF-8 modules instead of UTF-16 modules
+    manual: true
+    default: false

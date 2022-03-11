@@ -73,23 +73,23 @@ stack build
 Run the benchmark using the compiled binary:
 
 ```
-./benchmark.py haskell/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix haskell
+./benchmark.py haskell/.stack-work/dist/*/Cabal-*/build/ac-bench/ac-bench --prefix haskell
 ```
 
 ### Haskell, UTF-8 Version
 
 In `text-2.0` and above, the `Text` type will use UTF-8 under the hood.
 The `haskell-utf8` directory contains a preliminary benchmark for `alfred-margaret` using UTF-8 byte arrays.
-To compile it, run Stack in the `haskell-utf8` directory:
+To compile it, run Stack with the `utf8` flag in the `haskell` directory:
 
 ```
-stack build
+stack build --flag ac-bench:utf8
 ```
 
 Run the benchmark using the compiled binary:
 
 ```
-./benchmark.py haskell-utf8/.stack-work/dist/*/Cabal-3.0.1.0/build/ac-bench/ac-bench --prefix haskell-utf8 --data-directory data-utf8
+./benchmark.py haskell/.stack-work/dist/*/Cabal-*/build/ac-bench/ac-bench --prefix haskell-utf8 --data-directory data-utf8
 ```
 
 Note that you must first convert the data files for the benchmark into UTF-8 and put them in `data-utf8`.
