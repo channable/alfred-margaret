@@ -17,6 +17,7 @@ module Data.Text.Utf8.AhoCorasick.Searcher
     , build
     , buildWithValues
     , caseSensitivity
+    , containsAll
     , containsAny
     , needles
     , numNeedles
@@ -31,6 +32,8 @@ import GHC.Generics (Generic)
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as AE
 #endif
+
+import qualified Data.IntSet as IS
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (Text)
@@ -153,3 +156,22 @@ containsAny !searcher !text =
   in case caseSensitivity searcher of
     CaseSensitive  -> Aho.runText False f (automaton searcher) text
     IgnoreCase      -> Aho.runLower False f (automaton searcher) text
+
+-- | Returns whether the haystack contains all of the needles.
+-- This function does not use the 'Searcher' type as it has to construct a very specific automaton.
+containsAll :: CaseSensitivity -> [Text] -> Text -> Bool
+containsAll !case_ !ns !haystack =
+  let
+    needleIds = [0..length ns - 1] :: [Int]
+    initial = IS.fromDistinctAscList needleIds
+    ac = Aho.build $ zip (map Utf8.unpackUtf8 ns) needleIds
+
+    f !acc (Aho.Match _index !needleId)
+      | IS.null acc' = Aho.Done acc'
+      | otherwise = Aho.Step acc'
+      where
+        !acc' = IS.delete needleId acc
+
+  in IS.null $ case case_ of
+    CaseSensitive -> Aho.runText initial f ac haystack
+    IgnoreCase   -> Aho.runLower initial f ac haystack

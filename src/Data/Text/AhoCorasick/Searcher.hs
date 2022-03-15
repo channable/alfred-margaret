@@ -155,6 +155,8 @@ containsAny !searcher !text =
     CaseSensitive -> Aho.runText False f (automaton searcher) text
     IgnoreCase   -> Aho.runLower False f (automaton searcher) text
 
+-- | Returns whether the haystack contains all of the needles.
+-- This function does not use the 'Searcher' type as it has to construct a very specific automaton.
 containsAll :: CaseSensitivity -> [Text] -> Text -> Bool
 containsAll !case_ !ns !haystack =
   let
