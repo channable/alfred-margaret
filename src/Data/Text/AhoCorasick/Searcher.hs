@@ -14,6 +14,7 @@ module Data.Text.AhoCorasick.Searcher
     ( Searcher
     , automaton
     , build
+    , buildNeedleIdAutomaton
     , buildWithValues
     , caseSensitivity
     , containsAll
@@ -155,15 +156,21 @@ containsAny !searcher !text =
     CaseSensitive -> Aho.runText False f (automaton searcher) text
     IgnoreCase   -> Aho.runLower False f (automaton searcher) text
 
--- | Returns whether the haystack contains all of the needles.
--- This function does not use the 'Searcher' type as it has to construct a very specific automaton.
-containsAll :: CaseSensitivity -> [Text] -> Text -> Bool
-containsAll !case_ !ns !haystack =
+-- | Build an automaton that returns the needle's index in the needle list when it matches.
+-- This function also constructs the initial accumulator value to be used with 'containsAll'.
+buildNeedleIdAutomaton :: [Text] -> (Aho.AcMachine Int, IS.IntSet)
+buildNeedleIdAutomaton !ns =
   let
-    needleIds = [0..length ns - 1] :: [Int]
+    needleIds = [0.. length ns - 1] :: [Int]
     initial = IS.fromDistinctAscList needleIds
-    ac = Aho.build $ zip (map Utf16.unpackUtf16 ns) needleIds
+  in
+    (Aho.build $ zip (map Utf16.unpackUtf16 ns) needleIds, initial)
 
+-- | Returns whether the haystack contains all of the needles.
+-- This function expects the passed automaton and 'IntSet' to be constructed using 'buildNeedleIdAutomaton'.
+containsAll :: CaseSensitivity -> Aho.AcMachine Int -> IS.IntSet -> Text -> Bool
+containsAll !case_ !ac !initial !haystack =
+  let
     f !acc (Aho.Match _index !needleId)
       | IS.null acc' = Aho.Done acc'
       | otherwise = Aho.Step acc'
