@@ -65,30 +65,6 @@ spec = do
             it "works with characters that are not in ASCII" $ do
                 countMatches Aho.IgnoreCase ["groß", "öffnung", "tür"] "Großfräsmaschinenöffnungstür" `shouldBe` 3
 
-    describe "Seacher" $ do
-
-        describe "containsAny" $ do
-
-            it "gives the right values for the examples in the README" $ do
-                let needles = ["tshirt", "shirts", "shorts"]
-                let searcher = Searcher.build Aho.CaseSensitive needles
-
-                Searcher.containsAny searcher "short tshirts" `shouldBe` True
-                Searcher.containsAny searcher "long shirt" `shouldBe` False
-                Searcher.containsAny searcher "Short TSHIRTS" `shouldBe` False
-
-                let searcher' = Searcher.build Aho.IgnoreCase needles
-
-                Searcher.containsAny searcher' "Short TSHIRTS" `shouldBe` True
-
-            it "works with the the first line of the illiad" $ do
-                let illiad = "Ἄνδρα μοι ἔννεπε, Μοῦσα, πολύτροπον, ὃς μάλα πολλὰ"
-                    needleSets = [(["μοι"], True), (["Ὀδυσεύς"], False)]
-
-                forM_ needleSets $ \(needles, expectedResult) -> do
-                    let searcher = Searcher.build Aho.CaseSensitive needles
-                    Searcher.containsAny searcher illiad `shouldBe` expectedResult
-
     modifyMaxSize (const 10) $ describe "Replacer" $ do
 
         describe "run" $ do
@@ -179,6 +155,28 @@ spec = do
                     Replacer.run replacer haystack `shouldBe` expected
 
     describe "Searcher" $ do
+
+        describe "containsAny" $ do
+
+            it "gives the right values for the examples in the README" $ do
+                let needles = ["tshirt", "shirts", "shorts"]
+                let searcher = Searcher.build Aho.CaseSensitive needles
+
+                Searcher.containsAny searcher "short tshirts" `shouldBe` True
+                Searcher.containsAny searcher "long shirt" `shouldBe` False
+                Searcher.containsAny searcher "Short TSHIRTS" `shouldBe` False
+
+                let searcher' = Searcher.build Aho.IgnoreCase needles
+
+                Searcher.containsAny searcher' "Short TSHIRTS" `shouldBe` True
+
+            it "works with the the first line of the illiad" $ do
+                let illiad = "Ἄνδρα μοι ἔννεπε, Μοῦσα, πολύτροπον, ὃς μάλα πολλὰ"
+                    needleSets = [(["μοι"], True), (["Ὀδυσεύς"], False)]
+
+                forM_ needleSets $ \(needles, expectedResult) -> do
+                    let searcher = Searcher.build Aho.CaseSensitive needles
+                    Searcher.containsAny searcher illiad `shouldBe` expectedResult
 
         describe "containsAll" $ do
 
