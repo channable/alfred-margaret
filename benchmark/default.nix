@@ -24,6 +24,7 @@ pkgs.mkShell {
         # For Haskell implementation
         pkgs.stack
         pkgs.gmp
-        pkgs.llvmPackages_12.llvm
+        # GHC 8.10.7 produces faster code with LLVM 9 than with LLVM 12
+        pkgs.llvmPackages_9.llvm
     ];
 }

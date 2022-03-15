@@ -30,6 +30,12 @@ For the full details of this benchmark, see
 data set, the benchmark setup, and a few things to keep in mind when
 interpreting this graph.
 
+### LLVM
+
+If you are using LLVM instead of the GHC backend, make sure to compare different versions.
+Using LLVM 9 instead of LLVM 12 with GHC 8.10.7 made a significant dent in benchmark times.
+For more information, see [this issue][llvm].
+
 ## Example
 
 Check if a string contains one of the needles:
@@ -109,3 +115,4 @@ Alfred–Margaret is licensed under the 3-clause BSD license.
 [text]:       https://github.com/haskell/text
 [hankcs]:     https://github.com/hankcs/AhoCorasickDoubleArrayTrie/tree/v1.2.0
 [burntsushi]: https://github.com/BurntSushi/aho-corasick/tree/0.6.8
+[llvm]: https://github.com/channable/alfred-margaret/issues/24
