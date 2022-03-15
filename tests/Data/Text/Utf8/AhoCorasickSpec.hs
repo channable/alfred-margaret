@@ -182,16 +182,16 @@ spec = do
 
             prop "never reports true for empty needles" $ \ (haystack :: Text) ->
                 let
-                    (ac, initial) = Searcher.buildNeedleIdAutomaton [""]
+                    searcher = Searcher.buildNeedleIdSearcher CaseSensitive [""]
                 in
-                    Searcher.containsAll CaseSensitive ac initial haystack `shouldBe` False
+                    Searcher.containsAll searcher haystack `shouldBe` False
 
             prop "is equivalent to sequential Text.isInfixOf calls for non-empty needles" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
                 let
                     needles = map unNonEmptyText needles'
-                    (ac, initial) = Searcher.buildNeedleIdAutomaton needles
+                    searcher = Searcher.buildNeedleIdSearcher CaseSensitive needles
                 in
-                    Searcher.containsAll CaseSensitive ac initial haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+                    Searcher.containsAll searcher haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
 
             prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching for non-empty needles" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
                 let
@@ -200,9 +200,9 @@ spec = do
                     lowerNeedles = map Utf8.lowerUtf8 needles
                     lowerHaystack = Utf8.lowerUtf8 haystack
 
-                    (ac, initial) = Searcher.buildNeedleIdAutomaton lowerNeedles
+                    searcher = Searcher.buildNeedleIdSearcher IgnoreCase lowerNeedles
                 in
-                    Searcher.containsAll IgnoreCase ac initial haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
+                    Searcher.containsAll searcher haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
 
     describe "Splitter" $ do
 

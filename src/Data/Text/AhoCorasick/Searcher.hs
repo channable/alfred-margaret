@@ -9,12 +9,13 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Data.Text.AhoCorasick.Searcher
     ( Searcher
     , automaton
     , build
-    , buildNeedleIdAutomaton
+    , buildNeedleIdSearcher
     , buildWithValues
     , caseSensitivity
     , containsAll
@@ -105,7 +106,7 @@ instance Semigroup (Searcher ()) where
 -- The caller is responsible that the needles are lower case in case the IgnoreCase
 -- is used for case sensitivity
 build :: CaseSensitivity -> [Text] -> Searcher ()
-build case_ = buildWithValues case_ . fmap (\x -> (x, ()))
+build case_ = buildWithValues case_ . fmap (, ())
 
 -- | The caller is responsible that the needles are lower case in case the IgnoreCase
 -- is used for case sensitivity
@@ -156,27 +157,32 @@ containsAny !searcher !text =
     CaseSensitive -> Aho.runText False f (automaton searcher) text
     IgnoreCase   -> Aho.runLower False f (automaton searcher) text
 
--- | Build an automaton that returns the needle's index in the needle list when it matches.
--- This function also constructs the initial accumulator value to be used with 'containsAll'.
-buildNeedleIdAutomaton :: [Text] -> (Aho.AcMachine Int, IS.IntSet)
-buildNeedleIdAutomaton !ns =
-  let
-    needleIds = [0.. length ns - 1] :: [Int]
-    initial = IS.fromDistinctAscList needleIds
-  in
-    (Aho.build $ zip (map Utf16.unpackUtf16 ns) needleIds, initial)
+-- | Build a 'Searcher' that returns the needle's index in the needle list when it matches.
+buildNeedleIdSearcher :: CaseSensitivity -> [Text] -> Searcher Int
+buildNeedleIdSearcher !case_ !ns =
+  buildWithValues case_ $ zip ns [0.. length ns - 1]
 
 -- | Returns whether the haystack contains all of the needles.
--- This function expects the passed automaton and 'IntSet' to be constructed using 'buildNeedleIdAutomaton'.
-containsAll :: CaseSensitivity -> Aho.AcMachine Int -> IS.IntSet -> Text -> Bool
-containsAll !case_ !ac !initial !haystack =
+-- This function expects the passed 'Searcher' to be constructed using 'buildNeedleIdAutomaton'.
+containsAll :: Searcher Int -> Text -> Bool
+containsAll !searcher !haystack =
   let
+    initial = buildIntSetFromTo 0 $ numNeedles searcher
+    ac = automaton searcher
+
     f !acc (Aho.Match _index !needleId)
       | IS.null acc' = Aho.Done acc'
       | otherwise = Aho.Step acc'
       where
         !acc' = IS.delete needleId acc
 
-  in IS.null $ case case_ of
+  in IS.null $ case caseSensitivity searcher of
     CaseSensitive -> Aho.runText initial f ac haystack
     IgnoreCase   -> Aho.runLower initial f ac haystack
+
+-- | Build an 'IntSet' containing the given range.
+-- The resulting set contains all 'Int's greater than or equal to the first and smaller than the second.
+buildIntSetFromTo :: Int -> Int -> IS.IntSet
+buildIntSetFromTo = go IS.empty
+  where go !acc !lo !hi | lo >= hi  = acc
+                        | otherwise = go (IS.insert lo acc) (lo + 1) hi
