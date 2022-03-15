@@ -6,6 +6,7 @@
 
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.Text.Utf8.AhoCorasickSpec where
 
@@ -20,8 +21,11 @@ import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
 import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
 
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Orphans ()
+import Data.Text.Utf8 (Text)
 
+import qualified Data.Text.Utf8 as Text
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 import qualified Data.Text.Utf8.AhoCorasick.Replacer as Replacer
@@ -173,6 +177,20 @@ spec = do
                     expected = foldl' replaceText haystack replaces
                 in
                     Replacer.run replacer haystack `shouldBe` expected
+
+    describe "Searcher" $ do
+
+        describe "containsAll" $ do
+
+            prop "is equivalent to sequential Text.isInfixOf calls" $ \ (needles :: [Text]) (haystack :: Text) ->
+                Searcher.containsAll CaseSensitive needles haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+
+            prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching" $ \ (needles :: [Text]) (haystack :: Text) ->
+                let
+                    lowerNeedles = map Utf8.lowerUtf8 needles
+                    lowerHaystack = Utf8.lowerUtf8 haystack
+                in
+                    Searcher.containsAll IgnoreCase lowerNeedles haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
 
     describe "Splitter" $ do
 
