@@ -70,9 +70,9 @@ import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, compa
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Prelude hiding (length)
-#if defined(HAS_AESON)
+
 import Data.Aeson (FromJSON, ToJSON, Value (String), parseJSON, toJSON, withText)
-#endif
+
 
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
@@ -93,11 +93,11 @@ newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int
     }
     deriving stock (Eq, Ord, Show, Generic, Bounded)
-#if defined(HAS_AESON)
+
     deriving newtype (Hashable, Num, NFData, AE.FromJSON, AE.ToJSON)
-#else
-    deriving newtype (Hashable, Num, NFData)
-#endif
+
+
+
 data Text
   -- | A placeholder data type for UTF-8 encoded text until we can use text-2.0.
   = Text
@@ -119,14 +119,14 @@ instance Show Text where
 
 -- Instances required for the Searcher modules etc.
 
-#if defined(HAS_AESON)
+
 -- NOTE: This is ugly and slow but will be removed once we move to text-2.0.
 instance ToJSON Text where
   toJSON = String . T.pack . unpack
 
 instance FromJSON Text where
   parseJSON = withText "Data.Text.Utf8.Text" (pure . pack . T.unpack)
-#endif
+
 
 -- Copied from https://hackage.haskell.org/package/hashable-1.4.0.2/docs/src/Data.Hashable.Class.html#line-746
 instance Hashable Text where
@@ -155,11 +155,12 @@ toUtf16Text :: Text -> T.Text
 toUtf16Text (Text u8data off len) =
   T.unfoldr go 0
   where
+    go :: CodeUnitIndex -> Maybe (Char, CodeUnitIndex)
     go i
-      | i >= len = Nothing
+      | i >= CodeUnitIndex len = Nothing
       | otherwise =
         let
-          (codeUnits, codePoint) = unsafeIndexCodePoint' u8data (CodeUnitIndex $ off + i)
+          (codeUnits, codePoint) = unsafeIndexCodePoint' u8data $ CodeUnitIndex off + i
         in
           Just (codePoint, i + codeUnits)
 
@@ -258,7 +259,7 @@ stringToByteArray = byteArrayFromList . concatMap char2utf8
 -- Does not perform bounds checking.
 -- See 'decode2', 'decode3' and 'decode4' for the expected format of multi-byte code points.
 {-# INLINE unsafeIndexCodePoint' #-}
-unsafeIndexCodePoint' :: ByteArray -> CodeUnitIndex -> (Int, CodePoint)
+unsafeIndexCodePoint' :: ByteArray -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
 unsafeIndexCodePoint' !u8data (CodeUnitIndex !idx)
   | cu0 < 0xc0 = (1, Char.chr $ fromIntegral cu0)
   | cu0 < 0xe0 = (2, decode2 cu0 (cuAt 1))
@@ -270,7 +271,7 @@ unsafeIndexCodePoint' !u8data (CodeUnitIndex !idx)
 
 -- | Does exactly the same thing as 'unsafeIndexCodePoint'', but on 'Text' values.
 {-# INLINE unsafeIndexCodePoint #-}
-unsafeIndexCodePoint :: Text -> CodeUnitIndex -> (Int, CodePoint)
+unsafeIndexCodePoint :: Text -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
 unsafeIndexCodePoint (Text !u8data !off !_len) (CodeUnitIndex !index) =
   unsafeIndexCodePoint' u8data $ CodeUnitIndex $ off + index
 
@@ -353,10 +354,10 @@ dropWhile predicate text =
   let
     len = codeUnitIndex (lengthUtf8 text)
     go i
-      | i >= len = i
+      | i >= CodeUnitIndex len = i
       | otherwise =
         let
-          (codeUnits, codePoint) = unsafeIndexCodePoint text $ CodeUnitIndex i
+          (codeUnits, codePoint) = unsafeIndexCodePoint text i
         in
           if predicate codePoint then
             go $ i + codeUnits
@@ -365,7 +366,7 @@ dropWhile predicate text =
 
     prefixEnd = go 0
   in
-    unsafeSliceUtf8 (CodeUnitIndex prefixEnd) (CodeUnitIndex $ len - prefixEnd) text
+    unsafeSliceUtf8 prefixEnd (CodeUnitIndex len - prefixEnd) text
 
 -- | Checks whether a text is the empty string.
 null :: Text -> Bool
@@ -391,21 +392,21 @@ indices needle haystack
   | needleLen == 0 = []
   | otherwise = go 0 0
   where
-    CodeUnitIndex needleLen = lengthUtf8 needle
-    CodeUnitIndex haystackLen = lengthUtf8 haystack
+    needleLen = lengthUtf8 needle
+    haystackLen = lengthUtf8 haystack
 
     go startIdx needleIdx
       -- needle is longer than remaining haystack
       | startIdx + needleLen > haystackLen = []
       -- whole needle matched
-      | needleIdx >= needleLen = startIdx : go (startIdx + needleLen) 0
+      | needleIdx >= needleLen = codeUnitIndex startIdx : go (startIdx + needleLen) 0
       -- charachter mismatch
       | needleCp /= haystackCp = go (startIdx + 1) 0
       -- advance
       | otherwise = go startIdx $ needleIdx + codeUnits
       where
-        (codeUnits, needleCp) = unsafeIndexCodePoint needle $ CodeUnitIndex needleIdx
-        (_, haystackCp) = unsafeIndexCodePoint haystack $ CodeUnitIndex $ startIdx + needleIdx
+        (codeUnits, needleCp) = unsafeIndexCodePoint needle needleIdx
+        (_, haystackCp) = unsafeIndexCodePoint haystack $ startIdx + needleIdx
 
 -- | TODO: Inefficient placeholder implementation.
 isInfixOf :: Text -> Text -> Bool

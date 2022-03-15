@@ -444,8 +444,11 @@ runWithCase !caseSensitivity !seed !f !machine !text =
   where
     initialState = 0
 
-    Text !u8data !initialOffset !initialRemaining = text
+    Text !u8data !off !len = text
     AcMachine !values !transitions !offsets !rootAsciiTransitions = machine
+
+    !initialOffset = CodeUnitIndex off
+    !initialRemaining = CodeUnitIndex len
 
     -- NOTE: All of the arguments are strict here, because we want to compile
     -- them down to unpacked variables on the stack, or even registers.
@@ -461,27 +464,27 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     -- | Consume a code unit sequence that constitutes a full code point.
     -- If the code unit at @offset@ is ASCII, we can lower it using 'Utf8.toLowerAscii'.
     {-# NOINLINE consumeInput #-}
-    consumeInput :: Int -> Int -> a -> State -> a
+    consumeInput :: CodeUnitIndex -> CodeUnitIndex -> a -> State -> a
     consumeInput !_offset 0 !acc !_state = acc
     consumeInput !offset !remaining !acc !state =
       followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
 
       where
-        (!codeUnits, !cp) = Utf8.unsafeIndexCodePoint' u8data $ CodeUnitIndex offset
+        (!codeUnits, !cp) = Utf8.unsafeIndexCodePoint' u8data offset
 
         !possiblyLoweredCp = case caseSensitivity of
           CaseSensitive -> cp
           IgnoreCase -> Utf8.lowerCodePoint cp
 
     {-# INLINE followCodePoint #-}
-    followCodePoint :: Int -> Int -> a -> CodePoint -> State -> a
+    followCodePoint :: CodeUnitIndex -> CodeUnitIndex -> a -> CodePoint -> State -> a
     followCodePoint !offset !remaining !acc !cp !state
       | state == initialState && Char.ord cp < asciiCount = lookupRootAsciiTransition offset remaining acc cp
       | otherwise = lookupTransition offset remaining acc cp state $ offsets `uAt` state
 
     -- NOTE: This function can't be inlined since it is self-recursive.
     {-# NOINLINE lookupTransition #-}
-    lookupTransition :: Int -> Int -> a -> CodePoint -> State -> Offset -> a
+    lookupTransition :: CodeUnitIndex -> CodeUnitIndex -> a -> CodePoint -> State -> Offset -> a
     lookupTransition !offset !remaining !acc !cp !state !i
       -- There is no transition for the given input. Follow the fallback edge,
       -- and try again from that state, etc. If we are in the base state
@@ -521,7 +524,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
         -- function returns `Done`, then we early out. Otherwise continue.
         handleMatch !acc' vs = case vs of
           []     -> consumeInput offset remaining acc' state
-          v:more -> case f acc' (Match (CodeUnitIndex $ offset - initialOffset) v) of
+          v:more -> case f acc' (Match (offset - initialOffset) v) of
             Step newAcc -> handleMatch newAcc more
             Done finalAcc -> finalAcc
       in
