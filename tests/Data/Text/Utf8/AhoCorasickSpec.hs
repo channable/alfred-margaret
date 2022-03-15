@@ -16,7 +16,7 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Primitive (byteArrayFromList)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (modifyMaxSize, prop)
-import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink, (==>))
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), Gen, forAll, forAllShrink, (==>))
 
 import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
@@ -186,22 +186,23 @@ spec = do
                 in
                     Searcher.containsAll CaseSensitive ac initial haystack `shouldBe` False
 
-            prop "is equivalent to sequential Text.isInfixOf calls for non-empty needles" $ \ (needles :: [Text]) (haystack :: Text) ->
-                not (any Text.null needles) ==>
-                    let
-                        (ac, initial) = Searcher.buildNeedleIdAutomaton needles
-                    in
-                        Searcher.containsAll CaseSensitive ac initial haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+            prop "is equivalent to sequential Text.isInfixOf calls for non-empty needles" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
+                let
+                    needles = map unNonEmptyText needles'
+                    (ac, initial) = Searcher.buildNeedleIdAutomaton needles
+                in
+                    Searcher.containsAll CaseSensitive ac initial haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
 
-            prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching for non-empty needles" $ \ (needles :: [Text]) (haystack :: Text) ->
-                not (any Text.null needles) ==>
-                    let
-                        lowerNeedles = map Utf8.lowerUtf8 needles
-                        lowerHaystack = Utf8.lowerUtf8 haystack
+            prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching for non-empty needles" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
+                let
+                    needles = map unNonEmptyText needles'
 
-                        (ac, initial) = Searcher.buildNeedleIdAutomaton lowerNeedles
-                    in
-                        Searcher.containsAll IgnoreCase ac initial haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
+                    lowerNeedles = map Utf8.lowerUtf8 needles
+                    lowerHaystack = Utf8.lowerUtf8 haystack
+
+                    (ac, initial) = Searcher.buildNeedleIdAutomaton lowerNeedles
+                in
+                    Searcher.containsAll IgnoreCase ac initial haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
 
     describe "Splitter" $ do
 
@@ -235,3 +236,13 @@ countMatches caseSensitivity needles haystack = case needles of
       onMatch !n _match = Aho.Step (n + 1)
     in
       Aho.runWithCase caseSensitivity 0 onMatch ac haystack
+
+-- | A newtype for generating non-empty 'Text' values.
+newtype NonEmptyText = NonEmptyText { unNonEmptyText :: Text }
+
+-- | Simply generates and packs non-empty @[Char]@ values.
+instance Arbitrary NonEmptyText where
+    arbitrary = NonEmptyText . Text.pack <$> Gen.listOf1 arbitrary
+
+instance Show NonEmptyText where
+    show = show . unNonEmptyText

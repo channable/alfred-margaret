@@ -407,22 +407,23 @@ spec = parallel $ do
       in
         Searcher.containsAll CaseSensitive ac initial haystack `shouldBe` False
 
-    prop "is equivalent to sequential Text.isInfixOf calls" $ \ (needles :: [Text]) (haystack :: Text) ->
-      not (any Text.null needles) ==>
-        let
-          (ac, initial) = Searcher.buildNeedleIdAutomaton needles
-        in
-          Searcher.containsAll CaseSensitive ac initial haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+    prop "is equivalent to sequential Text.isInfixOf calls" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
+      let
+        needles = map unNonEmptyText needles'
+        (ac, initial) = Searcher.buildNeedleIdAutomaton needles
+      in
+        Searcher.containsAll CaseSensitive ac initial haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
 
-    prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching" $ \ (needles :: [Text]) (haystack :: Text) ->
-      not (any Text.null needles) ==>
-        let
-          lowerNeedles = map Text.toLower needles
-          lowerHaystack = Text.toLower haystack
+    prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
+      let
+        needles = map unNonEmptyText needles'
 
-          (ac, initial) = Searcher.buildNeedleIdAutomaton lowerNeedles
-        in
-        Searcher.containsAll IgnoreCase ac initial haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
+        lowerNeedles = map Text.toLower needles
+        lowerHaystack = Text.toLower haystack
+
+        (ac, initial) = Searcher.buildNeedleIdAutomaton lowerNeedles
+      in
+      Searcher.containsAll IgnoreCase ac initial haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
 
   describe "Splitter.split" $
 
@@ -431,3 +432,15 @@ spec = parallel $ do
       let splitter = Splitter.build separator in
       Splitter.split splitter "C++bobobCOBOLbobScala"
         `shouldBe` "C++" :| ["obCOBOL", "Scala"]
+
+-- helpers
+
+-- | A newtype for generating non-empty 'Text' values.
+newtype NonEmptyText = NonEmptyText { unNonEmptyText :: Text }
+
+-- | Simply generates and packs non-empty @[Char]@ values.
+instance Arbitrary NonEmptyText where
+    arbitrary = NonEmptyText . Text.pack <$> Gen.listOf1 arbitrary
+
+instance Show NonEmptyText where
+    show = show . unNonEmptyText
