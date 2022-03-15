@@ -401,15 +401,20 @@ spec = parallel $ do
 
   describe "Searcher.containsAll" $ do
 
+    prop "never reports true for empty needles" $ \ (haystack :: Text) ->
+      Searcher.containsAll CaseSensitive [""] haystack `shouldBe` False
+
     prop "is equivalent to sequential Text.isInfixOf calls" $ \ (needles :: [Text]) (haystack :: Text) ->
-      Searcher.containsAll CaseSensitive needles haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+      not (any Text.null needles) ==>
+        Searcher.containsAll CaseSensitive needles haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
 
     prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching" $ \ (needles :: [Text]) (haystack :: Text) ->
-      let
-        lowerNeedles = map Text.toLower needles
-        lowerHaystack = Text.toLower haystack
-      in
-      Searcher.containsAll IgnoreCase lowerNeedles haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
+      not (any Text.null needles) ==>
+        let
+          lowerNeedles = map Text.toLower needles
+          lowerHaystack = Text.toLower haystack
+        in
+        Searcher.containsAll IgnoreCase lowerNeedles haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
 
   describe "Splitter.split" $
 

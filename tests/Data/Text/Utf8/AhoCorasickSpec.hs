@@ -16,7 +16,7 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Primitive (byteArrayFromList)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (modifyMaxSize, prop)
-import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink, (==>))
 
 import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
@@ -182,15 +182,20 @@ spec = do
 
         describe "containsAll" $ do
 
-            prop "is equivalent to sequential Text.isInfixOf calls" $ \ (needles :: [Text]) (haystack :: Text) ->
-                Searcher.containsAll CaseSensitive needles haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+            prop "never reports true for empty needles" $ \ (haystack :: Text) ->
+                Searcher.containsAll CaseSensitive [""] haystack `shouldBe` False
 
-            prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching" $ \ (needles :: [Text]) (haystack :: Text) ->
-                let
-                    lowerNeedles = map Utf8.lowerUtf8 needles
-                    lowerHaystack = Utf8.lowerUtf8 haystack
-                in
-                    Searcher.containsAll IgnoreCase lowerNeedles haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
+            prop "is equivalent to sequential Text.isInfixOf calls for non-empty needles" $ \ (needles :: [Text]) (haystack :: Text) ->
+                not (any Text.null needles) ==>
+                    Searcher.containsAll CaseSensitive needles haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+
+            prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching for non-empty needles" $ \ (needles :: [Text]) (haystack :: Text) ->
+                not (any Text.null needles) ==>
+                    let
+                        lowerNeedles = map Utf8.lowerUtf8 needles
+                        lowerHaystack = Utf8.lowerUtf8 haystack
+                    in
+                        Searcher.containsAll IgnoreCase lowerNeedles haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
 
     describe "Splitter" $ do
 
