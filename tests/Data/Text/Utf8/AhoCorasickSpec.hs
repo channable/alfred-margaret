@@ -16,7 +16,7 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Primitive (byteArrayFromList)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (modifyMaxSize, prop)
-import Test.QuickCheck (Arbitrary (arbitrary, shrink), Gen, forAll, forAllShrink, (==>))
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
 
 import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
