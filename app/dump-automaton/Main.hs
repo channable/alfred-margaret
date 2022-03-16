@@ -12,7 +12,7 @@ main = do
         hPutStr stderr $ needle ++ ": "
         let needleBytes = Utf8.unpackUtf8 $ Utf8.pack needle
         hPrint stderr needleBytes
-        pure needleBytes
+        pure $ Utf8.pack needle
 
     let dot = debugBuildDot needles
     putStrLn dot

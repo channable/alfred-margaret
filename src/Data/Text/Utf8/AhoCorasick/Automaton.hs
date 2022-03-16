@@ -55,7 +55,7 @@ import qualified Data.List as List
 import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Utf8 (CodePoint, CodeUnit, CodeUnitIndex (CodeUnitIndex), Text (..))
+import Data.Text.Utf8 (CodePoint, CodeUnitIndex (CodeUnitIndex), Text (..))
 import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
@@ -166,7 +166,7 @@ packTransitions transitions =
 
 -- | Construct an Aho-Corasick automaton for the given needles.
 -- The automaton uses Unicode code points to match the input.
-build :: [([CodeUnit], v)] -> AcMachine v
+build :: [(Text, v)] -> AcMachine v
 build needlesWithValues =
   let
     -- Construct the Aho-Corasick automaton using IntMaps, which are a suitable
@@ -193,7 +193,7 @@ build needlesWithValues =
     AcMachine values transitions offsets rootTransitions
 
 -- | Build the automaton, and format it as Graphviz Dot, for visual debugging.
-debugBuildDot :: [[CodeUnit]] -> String
+debugBuildDot :: [Text] -> String
 debugBuildDot needles =
   let
     (_numStates, transitionMap, initialValueMap) =
@@ -239,53 +239,48 @@ type FallbackMap = IntMap State
 type ValuesMap v = IntMap [v]
 
 -- | Build the trie of the Aho-Corasick state machine for all input needles.
-buildTransitionMap :: forall v. [([CodeUnit], v)] -> (Int, TransitionMap, ValuesMap v)
-buildTransitionMap needles = buildTransitionMap' [(Utf8.decodeUtf8 cus, val) | (cus, val) <- needles]
-
-buildTransitionMap' :: forall v. [([CodePoint], v)] -> (Int, TransitionMap, ValuesMap v)
-buildTransitionMap' =
+buildTransitionMap :: forall v. [(Text, v)] -> (Int, TransitionMap, ValuesMap v)
+buildTransitionMap =
   let
     -- | Inserts a single needle into the given transition and values map.
-    -- Int is used to keep track of the current number of states.
-    go :: State
-      -> (Int, TransitionMap, ValuesMap v)
-      -> ([CodePoint], v)
-      -> (Int, TransitionMap, ValuesMap v)
+    insertNeedle :: (Int, TransitionMap, ValuesMap v) -> (Text, v) -> (Int, TransitionMap, ValuesMap v)
+    insertNeedle !acc (!needle, !value) = go stateInitial 0 acc
+      where
+        !needleLen = Utf8.lengthUtf8 needle
 
-    -- End of the current needle, insert the associated payload value.
-    -- If a needle occurs multiple times, then at this point we will merge
-    -- their payload values, so the needle is reported twice, possibly with
-    -- different payload values.
-    go !state (!numStates, transitions, values) ([], v) =
-      (numStates, transitions, IntMap.insertWith (++) state [v] values)
-
-    -- Follow the edge for the given input from the current state, creating it
-    -- if it does not exist.
-    go !state (!numStates, transitions, values) (input : needleTail, vs) =
-      let
-        transitionsFromState = transitions IntMap.! state
-      in
-        case IntMap.lookup (Char.ord input) transitionsFromState of
-          Just nextState ->
-            go nextState (numStates, transitions, values) (needleTail, vs)
-          Nothing ->
-            let
+        go !state !index (!numStates, !transitions, !values)
+          -- End of the current needle, insert the associated payload value.
+          -- If a needle occurs multiple times, then at this point we will merge
+          -- their payload values, so the needle is reported twice, possibly with
+          -- different payload values.
+          | index >= needleLen = (numStates, transitions, IntMap.insertWith (++) state [value] values)
+        go !state !index (!numStates, !transitions, !values) =
+          let
+            !transitionsFromState = transitions IntMap.! state
+            (!codeUnits, !input) = Utf8.unsafeIndexCodePoint needle index
+          in
+            case IntMap.lookup (Char.ord input) transitionsFromState of
+              -- Transition already exists, follow it and continue from there.
+              Just !nextState ->
+                go nextState (index + codeUnits) (numStates, transitions, values)
+              -- Transition for input does not exist at state:
               -- Allocate a new state, and insert a transition to it.
               -- Also insert an empty transition map for it.
-              nextState = numStates
-              transitionsFromState' = IntMap.insert (Char.ord input) nextState transitionsFromState
-              transitions'
-                = IntMap.insert state transitionsFromState'
-                $ IntMap.insert nextState IntMap.empty transitions
-            in
-              go nextState (numStates + 1, transitions', values) (needleTail, vs)
+              Nothing ->
+                let
+                  !nextState = numStates
+                  !transitionsFromState' = IntMap.insert (Char.ord input) nextState transitionsFromState
+                  !transitions'
+                    = IntMap.insert state transitionsFromState'
+                    $ IntMap.insert nextState IntMap.empty transitions
+                in
+                  go nextState (index + codeUnits) (numStates + 1, transitions', values)
 
     -- Initially, the root state (state 0) exists, and it has no transitions
     -- to anywhere.
     stateInitial = 0
     initialTransitions = IntMap.singleton stateInitial IntMap.empty
     initialValues = IntMap.empty
-    insertNeedle = go stateInitial
   in
     foldl' insertNeedle (1, initialTransitions, initialValues)
 

@@ -58,7 +58,7 @@ instance AE.FromJSON Splitter where
 {-# INLINE build #-}
 build :: Text -> Splitter
 build sep =
-  let !auto = Aho.build [(Utf8.unpackUtf8 sep, ())] in
+  let !auto = Aho.build [(sep, ())] in
   Splitter auto sep
 
 -- | Get the automaton that would be used for finding separators.

@@ -39,7 +39,6 @@ import qualified Data.IntSet as IS
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (Text)
 
-import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 
 -- | A set of needles with associated values, and an Aho-Corasick automaton to
@@ -114,10 +113,7 @@ build case_ = buildWithValues case_ . fmap (, ())
 buildWithValues :: Hashable v => CaseSensitivity -> [(Text, v)] -> Searcher v
 {-# INLINABLE buildWithValues #-}
 buildWithValues case_ ns =
-  let
-    unpack (text, value) = (Utf8.unpackUtf8 text, value)
-  in
-    Searcher case_ (hashed ns) (length ns) $ Aho.build $ fmap unpack ns
+  Searcher case_ (hashed ns) (length ns) $ Aho.build ns
 
 needles :: Searcher v -> [(Text, v)]
 needles = unhashed . searcherNeedles
