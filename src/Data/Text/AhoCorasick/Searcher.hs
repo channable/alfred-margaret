@@ -160,14 +160,14 @@ containsAny !searcher !text =
 -- | Build a 'Searcher' that returns the needle's index in the needle list when it matches.
 buildNeedleIdSearcher :: CaseSensitivity -> [Text] -> Searcher Int
 buildNeedleIdSearcher !case_ !ns =
-  buildWithValues case_ $ zip ns [0.. length ns - 1]
+  buildWithValues case_ $ zip ns [0..]
 
 -- | Returns whether the haystack contains all of the needles.
 -- This function expects the passed 'Searcher' to be constructed using 'buildNeedleIdAutomaton'.
 containsAll :: Searcher Int -> Text -> Bool
 containsAll !searcher !haystack =
   let
-    initial = buildIntSetFromTo 0 $ numNeedles searcher
+    initial = IS.fromDistinctAscList [0..numNeedles searcher - 1]
     ac = automaton searcher
 
     f !acc (Aho.Match _index !needleId)
@@ -179,10 +179,3 @@ containsAll !searcher !haystack =
   in IS.null $ case caseSensitivity searcher of
     CaseSensitive -> Aho.runText initial f ac haystack
     IgnoreCase   -> Aho.runLower initial f ac haystack
-
--- | Build an 'IntSet' containing the given range.
--- The resulting set contains all 'Int's greater than or equal to the first and smaller than the second.
-buildIntSetFromTo :: Int -> Int -> IS.IntSet
-buildIntSetFromTo = go IS.empty
-  where go !acc !lo !hi | lo >= hi  = acc
-                        | otherwise = go (IS.insert lo acc) (lo + 1) hi
