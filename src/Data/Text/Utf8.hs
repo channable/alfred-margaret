@@ -67,12 +67,12 @@ import Data.Hashable (Hashable (hashWithSalt), hashByteArrayWithSalt)
 import Data.Primitive.ByteArray (ByteArray (ByteArray), byteArrayFromList, compareByteArrays,
                                  indexByteArray, newByteArray, sizeofByteArray,
                                  unsafeFreezeByteArray, writeByteArray)
+import Data.String (IsString (fromString))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Prelude hiding (length)
 
 import Data.Aeson (FromJSON, ToJSON, Value (String), parseJSON, toJSON, withText)
-
 
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
@@ -135,6 +135,9 @@ instance Hashable Text where
 
 instance NFData Text where
   rnf (Text (ByteArray !_) !_ !_) = ()
+
+instance IsString Text where
+    fromString = pack
 
 {-# INLINABLE unpackUtf8 #-}
 unpackUtf8 :: Text -> [CodeUnit]
