@@ -71,10 +71,10 @@ import Data.String (IsString (fromString))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Prelude hiding (length)
-
+#if defined(HAS_AESON)
 import Data.Aeson (FromJSON, ToJSON, Value (String), parseJSON, toJSON, withText)
+#endif
 
-import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
 import qualified Data.Text as T
@@ -93,10 +93,11 @@ newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int
     }
     deriving stock (Eq, Ord, Show, Generic, Bounded)
-
-    deriving newtype (Hashable, Num, NFData, AE.FromJSON, AE.ToJSON)
-
-
+#if defined(HAS_AESON)
+    deriving newtype (Hashable, Num, NFData, FromJSON, ToJSON)
+#else
+    deriving newtype (Hashable, Num, NFData)
+#endif
 
 data Text
   -- | A placeholder data type for UTF-8 encoded text until we can use text-2.0.
@@ -119,14 +120,14 @@ instance Show Text where
 
 -- Instances required for the Searcher modules etc.
 
-
+#if defined(HAS_AESON)
 -- NOTE: This is ugly and slow but will be removed once we move to text-2.0.
 instance ToJSON Text where
   toJSON = String . T.pack . unpack
 
 instance FromJSON Text where
   parseJSON = withText "Data.Text.Utf8.Text" (pure . pack . T.unpack)
-
+#endif
 
 -- Copied from https://hackage.haskell.org/package/hashable-1.4.0.2/docs/src/Data.Hashable.Class.html#line-746
 instance Hashable Text where
@@ -345,7 +346,7 @@ unsafeSliceUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) (Text !u8data !of
 -- These functions are available in @text@ as well and should be removed once this library moves to @text-2@.
 -- You should be able to use these by doing @import qualified Data.Text.Utf8 as Text@ just like you would with @text@.
 --
--- NOTE: The 'Text' instances for @Show@, @Eq@, @Ord@, @FromJSON@, @ToJSON@ and @Hashable@ in this file also fall in this category.
+-- NOTE: The 'Text' instances for @Show@, @Eq@, @Ord@, @IsString@, @FromJSON@, @ToJSON@ and @Hashable@ in this file also fall in this category.
 
 -- | TODO: Inefficient placeholder implementation.
 concat :: [Text] -> Text

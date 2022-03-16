@@ -6,10 +6,11 @@
 module Data.Text.CaseSensitivity where
 
 import Control.DeepSeq (NFData)
-import Data.Aeson (FromJSON, ToJSON)
 import Data.Hashable (Hashable)
 import GHC.Generics (Generic)
-
+#if defined(HAS_AESON)
+import Data.Aeson (FromJSON, ToJSON)
+#endif
 data CaseSensitivity
   = CaseSensitive
   | IgnoreCase
