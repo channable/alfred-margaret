@@ -84,7 +84,7 @@ data Match v = Match
   { matchPos   :: {-# UNPACK #-} !CodeUnitIndex
   -- ^ The code unit index past the last code unit of the match. Note that this
   -- is not a code *point* (Haskell `Char`) index; a code point might be encoded
-  -- as two code units.
+  -- as up to four code units.
   , matchValue :: v
   -- ^ The payload associated with the matched needle.
   } deriving (Show, Eq)

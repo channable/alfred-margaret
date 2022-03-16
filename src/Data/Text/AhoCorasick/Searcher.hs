@@ -9,31 +9,33 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Data.Text.AhoCorasick.Searcher
-  ( Searcher
-  , build
-  , buildWithValues
-  , needles
-  , numNeedles
-  , automaton
-  , caseSensitivity
-  , containsAny
-  , setSearcherCaseSensitivity
-  )
-  where
+    ( Searcher
+    , automaton
+    , build
+    , buildNeedleIdSearcher
+    , buildWithValues
+    , caseSensitivity
+    , containsAll
+    , containsAny
+    , needles
+    , numNeedles
+    , setSearcherCaseSensitivity
+    ) where
 
 import Control.DeepSeq (NFData)
 import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
-import Data.Semigroup (Semigroup, (<>))
 import Data.Text (Text)
 import GHC.Generics (Generic)
+
+import qualified Data.IntSet as IS
 
 #if defined(HAS_AESON)
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as AE
 #endif
-
 import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
@@ -104,7 +106,7 @@ instance Semigroup (Searcher ()) where
 -- The caller is responsible that the needles are lower case in case the IgnoreCase
 -- is used for case sensitivity
 build :: CaseSensitivity -> [Text] -> Searcher ()
-build case_ = buildWithValues case_ . fmap (\x -> (x, ()))
+build case_ = buildWithValues case_ . fmap (, ())
 
 -- | The caller is responsible that the needles are lower case in case the IgnoreCase
 -- is used for case sensitivity
@@ -152,5 +154,28 @@ containsAny !searcher !text =
     -- On the first match, return True immediately.
     f _acc _match = Aho.Done True
   in case caseSensitivity searcher of
-    CaseSensitive  -> Aho.runText False f (automaton searcher) text
-    IgnoreCase      -> Aho.runLower False f (automaton searcher) text
+    CaseSensitive -> Aho.runText False f (automaton searcher) text
+    IgnoreCase   -> Aho.runLower False f (automaton searcher) text
+
+-- | Build a 'Searcher' that returns the needle's index in the needle list when it matches.
+buildNeedleIdSearcher :: CaseSensitivity -> [Text] -> Searcher Int
+buildNeedleIdSearcher !case_ !ns =
+  buildWithValues case_ $ zip ns [0..]
+
+-- | Returns whether the haystack contains all of the needles.
+-- This function expects the passed 'Searcher' to be constructed using 'buildNeedleIdAutomaton'.
+containsAll :: Searcher Int -> Text -> Bool
+containsAll !searcher !haystack =
+  let
+    initial = IS.fromDistinctAscList [0..numNeedles searcher - 1]
+    ac = automaton searcher
+
+    f !acc (Aho.Match _index !needleId)
+      | IS.null acc' = Aho.Done acc'
+      | otherwise = Aho.Step acc'
+      where
+        !acc' = IS.delete needleId acc
+
+  in IS.null $ case caseSensitivity searcher of
+    CaseSensitive -> Aho.runText initial f ac haystack
+    IgnoreCase   -> Aho.runLower initial f ac haystack

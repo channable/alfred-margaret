@@ -6,6 +6,7 @@
 
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.Text.Utf8.AhoCorasickSpec where
 
@@ -15,13 +16,16 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Primitive (byteArrayFromList)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (modifyMaxSize, prop)
-import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), Gen, forAll, forAllShrink, (==>))
 
 import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
 
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Orphans ()
+import Data.Text.Utf8 (Text)
 
+import qualified Data.Text.Utf8 as Text
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
 import qualified Data.Text.Utf8.AhoCorasick.Replacer as Replacer
@@ -60,30 +64,6 @@ spec = do
 
             it "works with characters that are not in ASCII" $ do
                 countMatches Aho.IgnoreCase ["groß", "öffnung", "tür"] "Großfräsmaschinenöffnungstür" `shouldBe` 3
-
-    describe "Seacher" $ do
-
-        describe "containsAny" $ do
-
-            it "gives the right values for the examples in the README" $ do
-                let needles = ["tshirt", "shirts", "shorts"]
-                let searcher = Searcher.build Aho.CaseSensitive needles
-
-                Searcher.containsAny searcher "short tshirts" `shouldBe` True
-                Searcher.containsAny searcher "long shirt" `shouldBe` False
-                Searcher.containsAny searcher "Short TSHIRTS" `shouldBe` False
-
-                let searcher' = Searcher.build Aho.IgnoreCase needles
-
-                Searcher.containsAny searcher' "Short TSHIRTS" `shouldBe` True
-
-            it "works with the the first line of the illiad" $ do
-                let illiad = "Ἄνδρα μοι ἔννεπε, Μοῦσα, πολύτροπον, ὃς μάλα πολλὰ"
-                    needleSets = [(["μοι"], True), (["Ὀδυσεύς"], False)]
-
-                forM_ needleSets $ \(needles, expectedResult) -> do
-                    let searcher = Searcher.build Aho.CaseSensitive needles
-                    Searcher.containsAny searcher illiad `shouldBe` expectedResult
 
     modifyMaxSize (const 10) $ describe "Replacer" $ do
 
@@ -174,6 +154,56 @@ spec = do
                 in
                     Replacer.run replacer haystack `shouldBe` expected
 
+    describe "Searcher" $ do
+
+        describe "containsAny" $ do
+
+            it "gives the right values for the examples in the README" $ do
+                let needles = ["tshirt", "shirts", "shorts"]
+                let searcher = Searcher.build Aho.CaseSensitive needles
+
+                Searcher.containsAny searcher "short tshirts" `shouldBe` True
+                Searcher.containsAny searcher "long shirt" `shouldBe` False
+                Searcher.containsAny searcher "Short TSHIRTS" `shouldBe` False
+
+                let searcher' = Searcher.build Aho.IgnoreCase needles
+
+                Searcher.containsAny searcher' "Short TSHIRTS" `shouldBe` True
+
+            it "works with the the first line of the illiad" $ do
+                let illiad = "Ἄνδρα μοι ἔννεπε, Μοῦσα, πολύτροπον, ὃς μάλα πολλὰ"
+                    needleSets = [(["μοι"], True), (["Ὀδυσεύς"], False)]
+
+                forM_ needleSets $ \(needles, expectedResult) -> do
+                    let searcher = Searcher.build Aho.CaseSensitive needles
+                    Searcher.containsAny searcher illiad `shouldBe` expectedResult
+
+        describe "containsAll" $ do
+
+            prop "never reports true for empty needles" $ \ (haystack :: Text) ->
+                let
+                    searcher = Searcher.buildNeedleIdSearcher CaseSensitive [""]
+                in
+                    Searcher.containsAll searcher haystack `shouldBe` False
+
+            prop "is equivalent to sequential Text.isInfixOf calls for non-empty needles" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
+                let
+                    needles = map unNonEmptyText needles'
+                    searcher = Searcher.buildNeedleIdSearcher CaseSensitive needles
+                in
+                    Searcher.containsAll searcher haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+
+            prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching for non-empty needles" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
+                let
+                    needles = map unNonEmptyText needles'
+
+                    lowerNeedles = map Utf8.lowerUtf8 needles
+                    lowerHaystack = Utf8.lowerUtf8 haystack
+
+                    searcher = Searcher.buildNeedleIdSearcher IgnoreCase lowerNeedles
+                in
+                    Searcher.containsAll searcher haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
+
     describe "Splitter" $ do
 
         describe "split" $ do
@@ -206,3 +236,13 @@ countMatches caseSensitivity needles haystack = case needles of
       onMatch !n _match = Aho.Step (n + 1)
     in
       Aho.runWithCase caseSensitivity 0 onMatch ac haystack
+
+-- | A newtype for generating non-empty 'Text' values.
+newtype NonEmptyText = NonEmptyText { unNonEmptyText :: Text }
+
+-- | Simply generates and packs non-empty @[Char]@ values.
+instance Arbitrary NonEmptyText where
+    arbitrary = NonEmptyText . Text.pack <$> Gen.listOf1 arbitrary
+
+instance Show NonEmptyText where
+    show = show . unNonEmptyText

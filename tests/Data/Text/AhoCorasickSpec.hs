@@ -38,6 +38,7 @@ import Data.Text.Orphans ()
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Replacer as Replacer
+import qualified Data.Text.AhoCorasick.Searcher as Searcher
 import qualified Data.Text.AhoCorasick.Splitter as Splitter
 import qualified Data.Text.Utf16 as Utf16
 
@@ -398,6 +399,32 @@ spec = parallel $ do
       in
         Replacer.run replacer haystack `shouldBe` expected
 
+  describe "Searcher.containsAll" $ do
+
+    prop "never reports true for empty needles" $ \ (haystack :: Text) ->
+      let
+        searcher = Searcher.buildNeedleIdSearcher CaseSensitive [""]
+      in
+        Searcher.containsAll searcher haystack `shouldBe` False
+
+    prop "is equivalent to sequential Text.isInfixOf calls" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
+      let
+        needles = map unNonEmptyText needles'
+        searcher = Searcher.buildNeedleIdSearcher CaseSensitive needles
+      in
+        Searcher.containsAll searcher haystack `shouldBe` all (`Text.isInfixOf` haystack) needles
+
+    prop "is equivalent to sequential Text.isInfixOf calls for case-insensitive matching" $ \ (needles' :: [NonEmptyText]) (haystack :: Text) ->
+      let
+        needles = map unNonEmptyText needles'
+
+        lowerNeedles = map Text.toLower needles
+        lowerHaystack = Text.toLower haystack
+
+        searcher = Searcher.buildNeedleIdSearcher IgnoreCase lowerNeedles
+      in
+        Searcher.containsAll searcher haystack `shouldBe` all (`Text.isInfixOf` lowerHaystack) lowerNeedles
+
   describe "Splitter.split" $
 
     it "passes an example" $
@@ -405,3 +432,15 @@ spec = parallel $ do
       let splitter = Splitter.build separator in
       Splitter.split splitter "C++bobobCOBOLbobScala"
         `shouldBe` "C++" :| ["obCOBOL", "Scala"]
+
+-- helpers
+
+-- | A newtype for generating non-empty 'Text' values.
+newtype NonEmptyText = NonEmptyText { unNonEmptyText :: Text }
+
+-- | Simply generates and packs non-empty @[Char]@ values.
+instance Arbitrary NonEmptyText where
+    arbitrary = NonEmptyText . Text.pack <$> Gen.listOf1 arbitrary
+
+instance Show NonEmptyText where
+    show = show . unNonEmptyText
