@@ -6,7 +6,7 @@ module Data.Text.Utf8.Utf8Spec where
 import Control.Monad (forM_)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 import Test.Hspec.QuickCheck (prop)
-import Test.QuickCheck (Arbitrary (arbitrary), choose)
+import Test.QuickCheck (Gen, choose, forAllShrink, shrink)
 
 import qualified Data.Char as Char
 
@@ -54,16 +54,21 @@ spec = do
 
     describe "slicing functions" $ do
 
+        let
+            -- | Example shown in section "Slicing Functions" in 'Data.Text.Utf8".
+            slicingExample :: Utf8.Text
+            slicingExample = Utf8.Text (stringToByteArray "ABCDEFGHIJKLMN") 1 11
+
         it "satisfies the example in Data.Text.Utf8" $ do
             let begin = Utf8.CodeUnitIndex 2
             let length_ = Utf8.CodeUnitIndex 6
             Utf8.unsafeSliceUtf8 begin length_ slicingExample `shouldBe` "DEFGHI"
             Utf8.unsafeCutUtf8 begin length_ slicingExample `shouldBe` ("BC", "JKL")
 
-        prop "unsafeSliceUtf8 and unsafeCutUtf8 are complementary" $ \ (SlicingExampleIndices begin length_ :: SlicingExampleIndices) -> do
-            let (prefix, suffix) = Utf8.unsafeCutUtf8 begin length_ slicingExample
-            Utf8.concat [prefix, Utf8.unsafeSliceUtf8 begin length_ slicingExample, suffix] `shouldBe` slicingExample
-
+        prop "unsafeSliceUtf8 and unsafeCutUtf8 are complementary" $
+            forAllShrink (arbitrarySlicingIndices slicingExample) shrink $ \ (begin, length_) -> do
+                let (prefix, suffix) = Utf8.unsafeCutUtf8 begin length_ slicingExample
+                Utf8.concat [prefix, Utf8.unsafeSliceUtf8 begin length_ slicingExample, suffix] `shouldBe` slicingExample
 
     describe "Basic Text instances" $ do
 
@@ -76,24 +81,14 @@ spec = do
         prop "Ord Text behaves like Ord String" $ \ (a :: String) (b :: String) -> do
             compare (Utf8.pack a) (Utf8.pack b) `shouldBe` compare a b
 
+arbitrarySlicingIndices :: Utf8.Text -> Gen (Utf8.CodeUnitIndex, Utf8.CodeUnitIndex)
+arbitrarySlicingIndices example = do
+    let exampleLength = Utf8.codeUnitIndex $ Utf8.lengthUtf8 example
 
--- | Example shown in section "Slicing Functions" in 'Data.Text.Utf8".
-slicingExample :: Utf8.Text
-slicingExample = Utf8.Text (stringToByteArray "ABCDEFGHIJKLMN") 1 11
+    begin <- choose (0, exampleLength)
+    length_ <- choose (0, exampleLength - begin)
 
-data SlicingExampleIndices = SlicingExampleIndices Utf8.CodeUnitIndex Utf8.CodeUnitIndex
-    deriving Show
-
-instance Arbitrary SlicingExampleIndices where
-    arbitrary = do
-        let exampleLength = unCodeUnitIndex $ Utf8.lengthUtf8 slicingExample
-
-        begin <- choose (0, exampleLength)
-        length_ <- choose (0, exampleLength - begin)
-
-        pure $ SlicingExampleIndices (Utf8.CodeUnitIndex begin) (Utf8.CodeUnitIndex length_)
-
-        where unCodeUnitIndex (Utf8.CodeUnitIndex i) = i
+    pure (Utf8.CodeUnitIndex begin, Utf8.CodeUnitIndex length_)
 
 asciiCodepoints :: [Char]
 asciiCodepoints = map Char.chr [0..0x7f]

@@ -14,3 +14,6 @@ instance Arbitrary CaseSensitivity where
 -- TODO: Slow placeholder implementation until we can use text-2.0
 instance Arbitrary Utf8.Text where
   arbitrary = fmap Utf8.pack arbitrary
+
+instance Arbitrary Utf8.CodeUnitIndex where
+  arbitrary = fmap Utf8.CodeUnitIndex arbitrary
