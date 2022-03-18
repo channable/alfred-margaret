@@ -178,7 +178,7 @@ toLowerAscii cp
 -- TODO: Slow placeholder implementation until we can use text-2.0
 {-# INLINE lowerUtf8 #-}
 lowerUtf8 :: Text -> Text
-lowerUtf8 = pack . map Char.toLower . unpack
+lowerUtf8 = pack . map lowerCodePoint . unpack
 
 asciiCount :: Int
 asciiCount = 128
