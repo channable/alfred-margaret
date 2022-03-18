@@ -10,23 +10,23 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
--- | This module provides functions that allow treating Text values as series of Utf16 codepoints
+-- | This module provides functions that allow treating Text values as series of UTF-16 codepoints
 -- instead of characters.
 module Data.Text.Utf16
-  ( CodeUnit
-  , CodeUnitIndex (..)
-  , lengthUtf16
-  , lowerUtf16
-  , lowerCodeUnit
-  , upperUtf16
-  , upperCodeUnit
-  , isCaseInvariant
-  , unpackUtf16
-  , unsafeCutUtf16
-  , unsafeSliceUtf16
-  , unsafeIndexUtf16
-  , indexTextArray
-  ) where
+    ( CodeUnit
+    , CodeUnitIndex (..)
+    , indexTextArray
+    , isCaseInvariant
+    , lengthUtf16
+    , lowerCodeUnit
+    , lowerUtf16
+    , unpackUtf16
+    , unsafeCutUtf16
+    , unsafeIndexUtf16
+    , unsafeSliceUtf16
+    , upperCodeUnit
+    , upperUtf16
+    ) where
 
 import Prelude hiding (length)
 
@@ -67,7 +67,7 @@ newtype CodeUnitIndex = CodeUnitIndex
 #endif
 
 
--- | Return a Text as a list of UTF-16 code units.
+-- | Return a 'Text' as a list of UTF-16 code units.
 {-# INLINABLE unpackUtf16 #-}
 unpackUtf16 :: Text -> [CodeUnit]
 unpackUtf16 (Text u16data offset length) =
@@ -132,7 +132,7 @@ lengthUtf16 :: Text -> CodeUnitIndex
 lengthUtf16 = CodeUnitIndex . TextUnsafe.lengthWord16
 
 -- | Return the code unit (not character) with the given index.
--- Note: The boudns are not checked.
+-- Note: The bounds are not checked.
 unsafeIndexUtf16 :: Text -> CodeUnitIndex -> CodeUnit
 {-# INLINE unsafeIndexUtf16 #-}
 unsafeIndexUtf16 (Text arr off _) (CodeUnitIndex pos) = indexTextArray arr (pos + off)
@@ -155,9 +155,9 @@ mapUtf16 f (Text u16data offset length) =
 -- Differences from `Text.toLower` include code points in the BMP that lowercase
 -- to multiple code points, and code points outside of the BMP.
 --
--- For example, "İ" (U+0130), which `toLower` converts to "i" (U+0069, U+0307),
+-- For example, \"İ\" (U+0130), which `toLower` converts to \"i\" (U+0069, U+0307),
 -- is converted into U+0069 only by `lowerUtf16`.
--- Also, "𑢢" (U+118A2), a code point from the Warang City writing system in the
+-- Also, \"𑢢\" (U+118A2), a code point from the Warang City writing system in the
 -- Supplementary Multilingual Plane, introduced in 2014 to Unicode 7. It would
 -- be lowercased to U+118C2 by `toLower`, but it is left untouched by
 -- `lowerUtf16`.
@@ -201,14 +201,16 @@ lowerCodeUnit cu
   -- also the test in AhoCorasickSpec.hs.
   | otherwise = fromIntegral $ Char.ord $ Char.toLower $ Char.chr $ fromIntegral cu
 
+-- | Lowercase each individual code unit of a text without changing their index.
+-- See also 'lowerUtf16' and 'lowerCodeUnit'.
 {-# INLINE upperUtf16 #-}
 upperUtf16 :: Text -> Text
 upperUtf16 = mapUtf16 upperCodeUnit
 
+-- | Analogous to 'lowerCodeUnit'.
 {-# INLINE upperCodeUnit #-}
 upperCodeUnit :: CodeUnit -> CodeUnit
 upperCodeUnit cu
-  -- Analogous implementation to lowerCodeUnit
   | fromIntegral cu >= Char.ord 'a' && fromIntegral cu <= Char.ord 'z'
     = cu - fromIntegral (Char.ord 'a' - Char.ord 'A')
   | cu <= 127 = cu
@@ -222,6 +224,7 @@ upperCodeUnit cu
 isCaseInvariant :: Text -> Bool
 isCaseInvariant = Text.all (\c -> Char.toLower c == Char.toUpper c)
 
+-- | Retrieve a code unit from 'Text's internal representation.
 {-# INLINE indexTextArray #-}
 indexTextArray :: TextArray.Array -> Int -> CodeUnit
 indexTextArray array@(TextArray.Array byteArray) index

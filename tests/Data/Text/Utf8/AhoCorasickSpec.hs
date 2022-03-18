@@ -16,7 +16,7 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Primitive (byteArrayFromList)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (modifyMaxSize, prop)
-import Test.QuickCheck (Arbitrary (arbitrary, shrink), Gen, forAll, forAllShrink, (==>))
+import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
 
 import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
@@ -232,7 +232,7 @@ countMatches caseSensitivity needles haystack = case needles of
   [] -> 0
   _  ->
     let
-      ac = Aho.build $ zip (map Utf8.unpackUtf8 needles) (repeat ())
+      ac = Aho.build $ zip needles (repeat ())
       onMatch !n _match = Aho.Step (n + 1)
     in
       Aho.runWithCase caseSensitivity 0 onMatch ac haystack

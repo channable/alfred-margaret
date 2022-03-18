@@ -23,8 +23,7 @@ import Control.DeepSeq (NFData (rnf))
 import Control.Monad.Primitive (PrimMonad (PrimState))
 import Control.Monad.ST (runST)
 import Data.Primitive (ByteArray (ByteArray), MutableByteArray, Prim, byteArrayFromList,
-                       indexByteArray, newByteArray, sizeOf, thawByteArray, unsafeFreezeByteArray,
-                       writeByteArray)
+                       indexByteArray, newByteArray, sizeOf, unsafeFreezeByteArray, writeByteArray)
 
 -- | Thin wrapper around 'ByteArray' that makes signatures and indexing nicer to read.
 newtype TypedByteArray a = TypedByteArray ByteArray
