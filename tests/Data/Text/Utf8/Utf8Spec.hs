@@ -65,6 +65,18 @@ spec = do
             Utf8.concat [prefix, Utf8.unsafeSliceUtf8 begin length_ slicingExample, suffix] `shouldBe` slicingExample
 
 
+    describe "Basic Text instances" $ do
+
+        prop "Show Text behaves like Show String" $ \ (str :: String) -> do
+            show (Utf8.pack str) `shouldBe` show str
+
+        prop "Eq Text behaves like Eq String" $ \ (a :: String) (b :: String) -> do
+            Utf8.pack a == Utf8.pack b `shouldBe` a == b
+
+        prop "Ord Text behaves like Ord String" $ \ (a :: String) (b :: String) -> do
+            compare (Utf8.pack a) (Utf8.pack b) `shouldBe` compare a b
+
+
 -- | Example shown in section "Slicing Functions" in 'Data.Text.Utf8".
 slicingExample :: Utf8.Text
 slicingExample = Utf8.Text (stringToByteArray "ABCDEFGHIJKLMN") 1 11

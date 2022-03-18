@@ -113,7 +113,7 @@ instance Eq Text where
 
 instance Ord Text where
   compare (Text u8data offset length) (Text u8data' offset' length') =
-    compare length length' <> compareByteArrays u8data offset u8data' offset' (min length length')
+    compareByteArrays u8data offset u8data' offset' (min length length') <> compare length length'
 
 instance Show Text where
   show = show . unpack
