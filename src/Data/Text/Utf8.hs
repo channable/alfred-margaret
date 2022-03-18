@@ -138,7 +138,7 @@ instance NFData Text where
   rnf (Text (ByteArray !_) !_ !_) = ()
 
 instance IsString Text where
-    fromString = pack
+  fromString = pack
 
 {-# INLINABLE unpackUtf8 #-}
 unpackUtf8 :: Text -> [CodeUnit]
