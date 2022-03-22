@@ -100,6 +100,28 @@ mkdir data-utf8
 for f in $(ls data); do echo $f; iconv -f UTF-16LE -t UTF-8 data/$f -o data-utf8/$f; done
 ```
 
+### Haskell, with Rust FFI
+
+Compile the static `libacbench` library using `cargo` in the `rust-ffi/libacbench` directory:
+
+```
+cargo build --release
+```
+
+Make sure to pass `--release`! Now run Stack in the `rust-ffi` directory:
+
+```
+stack build
+```
+
+Run the benchmark using the compiled binary:
+
+```
+./benchmark.py rust-ffi/.stack-work/dist/*/Cabal-*/build/ac-bench/ac-bench --prefix rust-ffi --data-directory data-utf8
+```
+
+Since this version uses the UTF-8 as well, you have to generate the UTF-8 data first as described in the previous section.
+
 ## Inspecting the Results
 
 Once you have a bunch of `.stats` files, you can inspect the results using `report.py`:

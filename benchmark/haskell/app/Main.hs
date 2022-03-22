@@ -97,7 +97,7 @@ countMatches needles haystack = case needles of
   [] -> 0
   _  ->
     let
-      ac = Aho.build $ zip (fmap unpackCodeUnits needles) (repeat ())
+      ac = Aho.build $ zip needles (repeat ())
       onMatch !n _match = Aho.Step (n + 1)
     in
       Aho.runText 0 onMatch ac haystack
