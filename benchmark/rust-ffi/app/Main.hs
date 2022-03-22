@@ -65,7 +65,7 @@ processFile path = do
   void $ evaluate $ force needles
   void $ evaluate $ force haystack
 
-  for_ [0 :: Int .. 5] $ \i -> do
+  for_ [0 :: Int .. 4] $ \i -> do
     (count, duration) <- acBench needles haystack
     when (i == 0) $
       hPrint stderr count
