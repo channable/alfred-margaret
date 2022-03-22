@@ -6,8 +6,9 @@ import Control.Monad (void, when)
 import Data.Foldable (for_, traverse_)
 import Data.Word (Word8)
 import Foreign.C.Types (CSize (..))
-import Foreign.Marshal.Array (withArray)
-import Foreign.Ptr (Ptr)
+import Foreign.Marshal (with, withArray)
+import Foreign.Ptr (Ptr, castPtr)
+import Foreign.Storable (Storable (sizeOf), alignment, peek, poke, pokeByteOff, sizeOf)
 import GHC.Compact (compact, getCompact)
 import System.IO (hPrint, stderr, stdout)
 import Text.Printf (hPrintf)
@@ -21,7 +22,22 @@ import Data.Text.Utf8 (CodeUnitIndex (..), Text (..))
 import qualified Data.Text.Utf8 as Utf8
 
 foreign import ccall unsafe "perform_ac"
-  performAc :: CSize -> Ptr (Ptr Word8) -> Ptr CSize -> Ptr CSize -> Ptr Word8 -> CSize -> CSize -> IO CSize
+  performAc :: CSize -> Ptr U8Slice -> Ptr U8Slice -> IO CSize
+
+data U8Slice = U8Slice (Ptr Word8) CSize CSize
+
+instance Storable U8Slice where
+  sizeOf _ = sizeOf (undefined :: Ptr Word8) + 2 * sizeOf (undefined :: CSize)
+  alignment _ = max (alignment (undefined :: Ptr Word8)) (alignment (undefined :: CSize))
+  peek _ptr = error "We only write U8Slices to pointer, never read them"
+  poke ptr (U8Slice u8ptr off len) = do
+    poke ptr' u8ptr
+    pokeByteOff ptr' (sizeOf (undefined :: Ptr Word8)) off
+    pokeByteOff ptr' (sizeOf (undefined :: Ptr Word8) + sizeOf (undefined :: CSize)) len
+    where ptr' = castPtr ptr
+
+fromText :: Text -> U8Slice
+fromText (Text u8data off len) = U8Slice (BA.byteArrayContents u8data) (fromIntegral off) (fromIntegral len)
 
 readNeedleHaystackFile :: FilePath -> IO ([Text], Text)
 readNeedleHaystackFile path = do
@@ -59,19 +75,11 @@ processFile path = do
 acBench :: [Text] -> Text -> IO (Int, Clock.TimeSpec)
 acBench needles haystack = do
   start <- Clock.getTime Clock.Monotonic
-  let Text haystackArr haystackOff haystackLen = haystack
 
-  {-
-  printPtr $ BA.byteArrayContents haystackArr
-  dumpBytes (BA.byteArrayContents haystackArr) (fromIntegral haystackOff) (fromIntegral haystackLen)
-  -}
-
-  let numNeedles = length needles
-
-  matchCount <- withArray [BA.byteArrayContents ptr | Text ptr _ _ <- needles] $ \buffers ->
-    withArray [fromIntegral off | Text _ off _ <- needles] $ \offs ->
-      withArray [fromIntegral len | Text _ _ len <- needles] $ \lens -> do
-        performAc (fromIntegral numNeedles) buffers offs lens (BA.byteArrayContents haystackArr) (fromIntegral haystackOff) (fromIntegral haystackLen)
+  let numNeedles = fromIntegral $ length needles
+  matchCount <- with (fromText haystack) $ \haystackSlice ->
+    withArray (map fromText needles) $ \needleSlices -> do
+      performAc numNeedles needleSlices haystackSlice
 
   end <- Clock.getTime Clock.Monotonic
   pure (fromIntegral matchCount, Clock.diffTimeSpec start end)

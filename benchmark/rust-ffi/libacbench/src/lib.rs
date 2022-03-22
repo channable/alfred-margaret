@@ -3,6 +3,20 @@ extern crate aho_corasick;
 use aho_corasick::Automaton;
 use aho_corasick::{AcAutomaton, Dense};
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct U8Slice {
+    ptr: *const u8,
+    off: isize,
+    len: isize,
+}
+
+impl U8Slice {
+    fn into_slice<'a>(&self) -> &'a [u8] {
+        slice_from_pointer(self.ptr, self.off, self.len)
+    }
+}
+
 // https://doc.rust-lang.org/src/core/slice/raw.rs.html#87
 fn slice_from_pointer<'a, T>(ptr: *const T, off: isize, len: isize) -> &'a [T] {
     &(unsafe { &*std::ptr::slice_from_raw_parts(ptr, (off + len) as usize) })[off as usize..]
@@ -11,24 +25,17 @@ fn slice_from_pointer<'a, T>(ptr: *const T, off: isize, len: isize) -> &'a [T] {
 #[no_mangle]
 pub extern "C" fn perform_ac(
     num_needles: isize,
-    buffers_: *const *const u8,
-    offs_: *const isize,
-    lens_: *const isize,
-    haystack_buf: *const u8,
-    haystack_off: isize,
-    haystack_len: isize,
+    needle_slices_: *const U8Slice,
+    haystack_slice_: *const U8Slice,
 ) -> isize {
-    let buffers = slice_from_pointer(buffers_, 0, num_needles);
-    let offs = slice_from_pointer(offs_, 0, num_needles);
-    let lens = slice_from_pointer(lens_, 0, num_needles);
-
-    let mut needles = Vec::with_capacity(num_needles as usize);
+    let needle_slices = slice_from_pointer(needle_slices_, 0, num_needles);
+    // TODO: Can we somehow allocate this on the stack?
+    let mut needles: Vec<&[u8]> = Vec::with_capacity(num_needles as usize);
     for i in 0..num_needles as usize {
-        let needle = slice_from_pointer(buffers[i], offs[i], lens[i]);
-        needles.push(needle);
+        needles.push(needle_slices[i].into_slice());
     }
 
-    let haystack = slice_from_pointer(haystack_buf, haystack_off, haystack_len);
+    let haystack = slice_from_pointer(haystack_slice_, 0, 1)[0].into_slice();
 
     let automaton = AcAutomaton::<_, Dense>::with_transitions(&needles[..]);
     let num_matches = automaton.find_overlapping(haystack).count();
