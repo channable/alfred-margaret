@@ -36,8 +36,12 @@ instance Storable U8Slice where
     pokeByteOff ptr' (sizeOf (undefined :: Ptr Word8) + sizeOf (undefined :: CSize)) len
     where ptr' = castPtr ptr
 
+-- | Turn a 'Text' value into something that can be passed through FFI.
+-- The 'ByteArray' values inside must be pinned.
 fromText :: Text -> U8Slice
-fromText (Text u8data off len) = U8Slice (BA.byteArrayContents u8data) (fromIntegral off) (fromIntegral len)
+fromText (Text u8data off len)
+  | BA.isByteArrayPinned u8data = U8Slice (BA.byteArrayContents u8data) (fromIntegral off) (fromIntegral len)
+  | otherwise                   = error "Won't pass an unpinned ByteArray through FFI"
 
 readNeedleHaystackFile :: FilePath -> IO ([Text], Text)
 readNeedleHaystackFile path = do
