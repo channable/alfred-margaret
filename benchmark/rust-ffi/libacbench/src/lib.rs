@@ -32,7 +32,7 @@ pub extern "C" fn perform_ac(
     // TODO: Can we somehow allocate this on the stack?
     let mut needles: Vec<&[u8]> = Vec::with_capacity(num_needles as usize);
     for i in 0..num_needles as usize {
-        needles.push(needle_slices[i].into_slice());
+        needles.insert(i, needle_slices[i].into_slice());
     }
 
     let haystack = slice_from_pointer(haystack_slice_, 0, 1)[0].into_slice();
