@@ -1,4 +1,16 @@
 {-# LANGUAGE BangPatterns #-}
+
+-- | Microbenchmark to measure the difference in 'TypedByteArray' and 'Data.Vector.Unboxed.Vector' indexing performance.
+-- The later is a slice into a 'ByteArray' which means that every time you retrieve and element, an offset
+-- needs to be added to your index.
+--
+-- To reproduce:
+--
+-- @
+-- stack run uvector-vs-tba -- --output uvector-vs-tba.html
+-- @
+--
+-- You can pass a greater @--time-limit@ to increase the number of iterations.
 module Main where
 
 import Control.Monad.ST (runST)
@@ -9,20 +21,17 @@ import Text.Printf (printf)
 import qualified Data.Vector.Unboxed as UVector
 import qualified Data.Vector.Unboxed.Mutable as UMVector
 
-import Control.DeepSeq (NFData, force)
-import Control.Exception (evaluate)
 import qualified Data.TypedByteArray as TBA
-import System.IO.Unsafe (unsafePerformIO)
 
 main :: IO ()
 main = defaultMain
-  [ bgroup "tba" $ mkReadBenchs readTba genTba [6, 7, 8]
-  , bgroup "uvector" $ mkReadBenchs readUVector genUVector [6, 7, 8]
+  [ bgroup "tba" $ mkReadBenchs readTba genTba [7, 8]
+  , bgroup "uvector" $ mkReadBenchs readUVector genUVector [7, 8]
   ]
 
-mkReadBenchs :: NFData a => (Int -> a -> Int) -> (Int -> a) -> [Int] -> [Benchmark]
+mkReadBenchs :: (Int -> a -> Int) -> (Int -> a) -> [Int] -> [Benchmark]
 mkReadBenchs readPat gen powers =
-  [ bench (printf "%d reads" n) $ nf (readPat n) $ unsafePerformIO $ evaluate $ force (gen n)
+  [ bench (printf "%d reads" n) $ nf (readPat n) $ gen n
   | n <- map (10^) powers
   ]
 
@@ -33,12 +42,6 @@ readTba !n !arr = go 0
       | i >= n    = 42
       | otherwise = go $ TBA.unsafeIndex arr i
 
-genTba :: Int -> TBA.TypedByteArray Int
-genTba n = runST $ do
-  mutArr <- TBA.newTypedByteArray n
-  for_ [0 .. n-1] $ \i -> TBA.writeTypedByteArray mutArr i $ i + 1
-  TBA.unsafeFreezeTypedByteArray mutArr
-
 readUVector :: Int -> UVector.Vector Int -> Int
 readUVector !n !arr = go 0
   where
@@ -46,8 +49,19 @@ readUVector !n !arr = go 0
       | i >= n    = 42
       | otherwise = go $ UVector.unsafeIndex arr i
 
+-- NOTE: We should probably measure pseudo-random access time as well, e.g. by shuffing the generated arrays.
+
+genTba :: Int -> TBA.TypedByteArray Int
+genTba n = runST $ do
+  mutArr <- TBA.newTypedByteArray n
+  for_ [0 .. n-1] $ \i -> TBA.writeTypedByteArray mutArr i $ i + 1
+  TBA.unsafeFreezeTypedByteArray mutArr
+
+-- | Generate an unboxed vector @v@ such that @v[i] == i + 1@.
+-- This function also makes sure that the @offset@ property of the generated vector
+-- is not @0@ in order to avoid GHC optimizing that out.
 genUVector :: Int -> UVector.Vector Int
 genUVector n = runST $ do
-  mutArr <- UMVector.new $ 2 * n
-  for_ [0 .. 2*n-1] $ \i -> UMVector.write mutArr i $ i + 1 - n
-  UVector.slice n n <$> UVector.unsafeFreeze mutArr
+  mutArr <- UMVector.new $ 1 + n
+  for_ [0 .. n] $ \i -> UMVector.write mutArr i i
+  UVector.slice 1 n <$> UVector.unsafeFreeze mutArr
