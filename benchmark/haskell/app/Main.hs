@@ -18,7 +18,7 @@ import qualified System.Environment as Env
 
 -- Conditional function definitions
 #if defined(HAS_UTF8)
-import Data.Text.Utf8 (CodeUnit, CodeUnitIndex(..), Text (..))
+import Data.Text.Utf8 (CodeUnitIndex(..), Text (..))
 
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
@@ -38,7 +38,8 @@ readNeedleHaystackFile path = do
       | Utf8.unsafeIndexCodeUnit' u8data (CodeUnitIndex off) == 10 = go u8data (off + 1) (len - 1) $ Text u8data needleStart (off - needleStart) : needles
       | otherwise = consumeNeedle u8data (off + 1) (len - 1) needles needleStart
 
-unpackCodeUnits = Utf8.unpackUtf8
+unpackCodeUnits :: Text -> Text
+unpackCodeUnits = id
 #else
 import Data.Text (Text)
 
@@ -59,12 +60,13 @@ readNeedleHaystackFile path = do
       haystack = Text.unlines $ tail haystackLines
   pure (needles, haystack)
 
+unpackCodeUnits :: Text -> [CodeUnit]
 unpackCodeUnits = Utf16.unpackUtf16
 #endif
 
 -- These functions need to be defined by the conditional blocks above.
 readNeedleHaystackFile :: FilePath -> IO ([Text], Text)
-unpackCodeUnits :: Text -> [CodeUnit]
+-- unpackCodeUnits :: Text -> [CodeUnit]
 
 main :: IO ()
 main = Env.getArgs >>= traverse_ processFile
@@ -76,7 +78,7 @@ processFile path = do
   void $ evaluate $ force needles
   void $ evaluate $ force haystack
 
-  for_ [0 :: Int .. 5] $ \i -> do
+  for_ [0 :: Int .. 4] $ \i -> do
     (count, duration) <- acBench needles haystack
     when (i == 0) $
       hPrint stderr count

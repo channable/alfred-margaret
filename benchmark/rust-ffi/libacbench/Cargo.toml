@@ -1,0 +1,10 @@
+[package]
+name = "libacbench"
+version = "0.0.0"
+
+[dependencies]
+aho-corasick = "0.6.8"
+
+[lib]
+name = "libacbench"
+crate-type = ["staticlib"]

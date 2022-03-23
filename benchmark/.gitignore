@@ -23,3 +23,7 @@ haskell-utf8/ac-bench-utf8.cabal
 haskell-utf8/.stack-work
 
 rust/target/
+
+rust-ffi/ac-bench-ffi.cabal
+rust-ffi/.stack-work/
+rust-ffi/libacbench/target/
