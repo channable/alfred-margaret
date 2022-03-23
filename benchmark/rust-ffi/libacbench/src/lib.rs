@@ -29,7 +29,7 @@ pub extern "C" fn perform_ac(
     haystack_slice_: *const U8Slice,
 ) -> isize {
     let needle_slices = slice_from_pointer(needle_slices_, 0, num_needles);
-    // TODO: Can we somehow allocate this on the stack?
+
     let mut needles: Vec<&[u8]> = Vec::with_capacity(num_needles as usize);
     for i in 0..num_needles as usize {
         needles.insert(i, needle_slices[i].into_slice());

@@ -24,6 +24,9 @@ import qualified Data.Text.Utf8 as Utf8
 foreign import ccall unsafe "perform_ac"
   performAc :: CBool -> CSize -> Ptr U8Slice -> Ptr U8Slice -> IO CSize
 
+-- | A slice of 'Word8's that can be passed to FFI.
+-- The pointer should always point to pinned memory.
+-- Use 'fromText' for constructing 'U8Slice's to ensure this.
 data U8Slice = U8Slice (Ptr Word8) CSize CSize
 
 instance Storable U8Slice where
@@ -41,7 +44,7 @@ instance Storable U8Slice where
 fromText :: Text -> U8Slice
 fromText (Text u8data off len)
   | BA.isByteArrayPinned u8data = U8Slice (BA.byteArrayContents u8data) (fromIntegral off) (fromIntegral len)
-  | otherwise                   = error "Won't pass an unpinned ByteArray through FFI"
+  | otherwise                   = error "ByteArray is not pinned"
 
 readNeedleHaystackFile :: FilePath -> IO ([Text], Text)
 readNeedleHaystackFile path = do
