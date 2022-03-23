@@ -112,7 +112,7 @@ executable dump-automaton
 
 executable uvector-vs-tba
   main-is:             Main.hs
-  hs-source-dirs:      bench
+  hs-source-dirs:      app/uvector-vs-tba
   ghc-options:         -Wall -Wincomplete-record-updates -Wno-orphans
   build-depends:       base >= 4.7 && < 5
                      , alfred-margaret
