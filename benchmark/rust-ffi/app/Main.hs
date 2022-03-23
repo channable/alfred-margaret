@@ -5,7 +5,7 @@ import Control.Exception (evaluate)
 import Control.Monad (void, when)
 import Data.Foldable (for_, traverse_)
 import Data.Word (Word8)
-import Foreign.C.Types (CSize (..))
+import Foreign.C.Types (CBool (..), CSize (..))
 import Foreign.Marshal (with, withArray)
 import Foreign.Ptr (Ptr, castPtr)
 import Foreign.Storable (Storable (sizeOf), alignment, peek, poke, pokeByteOff, sizeOf)
@@ -22,7 +22,7 @@ import Data.Text.Utf8 (CodeUnitIndex (..), Text (..))
 import qualified Data.Text.Utf8 as Utf8
 
 foreign import ccall unsafe "perform_ac"
-  performAc :: CSize -> Ptr U8Slice -> Ptr U8Slice -> IO CSize
+  performAc :: CBool -> CSize -> Ptr U8Slice -> Ptr U8Slice -> IO CSize
 
 data U8Slice = U8Slice (Ptr Word8) CSize CSize
 
@@ -79,7 +79,13 @@ acBench needles haystack = do
   let numNeedles = fromIntegral $ length needles
   matchCount <- with (fromText haystack) $ \haystackSlice ->
     withArray (map fromText needles) $ \needleSlices -> do
-      performAc numNeedles needleSlices haystackSlice
+      performAc useSparse numNeedles needleSlices haystackSlice
 
   end <- Clock.getTime Clock.Monotonic
   pure (fromIntegral matchCount, Clock.diffTimeSpec start end)
+  where
+    -- Whether to use the sparse or dense implementation.
+    -- Set to @0@ to use the dense implementation.
+    -- Set to @1@ to use the sparse implementation.
+    useSparse :: CBool
+    useSparse = 0

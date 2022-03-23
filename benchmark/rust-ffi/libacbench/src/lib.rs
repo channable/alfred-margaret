@@ -1,7 +1,6 @@
 extern crate aho_corasick;
 
-use aho_corasick::Automaton;
-use aho_corasick::{AcAutomaton, Dense};
+use aho_corasick::{AcAutomaton, Automaton, Dense, Sparse};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -24,6 +23,7 @@ fn slice_from_pointer<'a, T>(ptr: *const T, off: isize, len: isize) -> &'a [T] {
 
 #[no_mangle]
 pub extern "C" fn perform_ac(
+    use_sparse: bool,
     num_needles: isize,
     needle_slices_: *const U8Slice,
     haystack_slice_: *const U8Slice,
@@ -37,8 +37,13 @@ pub extern "C" fn perform_ac(
 
     let haystack = slice_from_pointer(haystack_slice_, 0, 1)[0].into_slice();
 
-    let automaton = AcAutomaton::<_, Dense>::with_transitions(&needles[..]);
-    let num_matches = automaton.find_overlapping(haystack).count();
+    let num_matches = if use_sparse {
+        let automaton = AcAutomaton::<_, Sparse>::with_transitions(&needles[..]);
+        automaton.find_overlapping(haystack).count()
+    } else {
+        let automaton = AcAutomaton::<_, Dense>::with_transitions(&needles[..]);
+        automaton.find_overlapping(haystack).count()
+    };
 
     num_matches as isize
 }
