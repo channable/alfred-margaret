@@ -11,6 +11,9 @@
 -- @
 --
 -- You can pass a greater @--time-limit@ (in the single quotes) to increase the number of iterations.
+--
+-- NOTE: 'readUVector' and 'genUVector' are marked @NOINLINE@ to prevent GHC optimizing away the indexing addition.
+-- 'readTba' and 'genTba' are marked @NOINLINE@ as well for fairness, altough it shouldn't make a difference there.
 module Main where
 
 import Control.Monad.ST (runST)
@@ -39,6 +42,7 @@ mkReadBenchs readPattern gen powers =
   | n <- map (10^) powers
   ]
 
+{-# NOINLINE readTba #-}
 readTba :: Int -> TBA.TypedByteArray Int -> Int
 readTba !n !arr = go 0
   where
@@ -46,6 +50,7 @@ readTba !n !arr = go 0
       | i >= n    = 42
       | otherwise = go $ TBA.unsafeIndex arr i
 
+{-# NOINLINE readUVector #-}
 readUVector :: Int -> UVector.Vector Int -> Int
 readUVector !n !arr = go 0
   where
@@ -55,6 +60,7 @@ readUVector !n !arr = go 0
 
 -- NOTE: We should probably measure pseudo-random access time as well, e.g. by shuffling the generated arrays.
 
+{-# NOINLINE genTba #-}
 genTba :: Int -> TBA.TypedByteArray Int
 genTba n = runST $ do
   mutArr <- TBA.newTypedByteArray n
@@ -62,10 +68,9 @@ genTba n = runST $ do
   TBA.unsafeFreezeTypedByteArray mutArr
 
 -- | Generate an unboxed vector @v@ such that @v[i] == i + 1@.
--- This function also makes sure that the @offset@ property of the generated vector
--- is not @0@ in order to avoid GHC optimizing that out.
+{-# NOINLINE genUVector #-}
 genUVector :: Int -> UVector.Vector Int
 genUVector n = runST $ do
-  mutArr <- UMVector.new $ 1 + n
-  for_ [0 .. n] $ \i -> UMVector.write mutArr i i
-  UVector.slice 1 n <$> UVector.unsafeFreeze mutArr
+  mutArr <- UMVector.new n
+  for_ [0 .. n-1] $ \i -> UMVector.write mutArr i $ i + 1
+  UVector.unsafeFreeze mutArr
