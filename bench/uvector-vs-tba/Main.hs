@@ -7,10 +7,10 @@
 -- To reproduce:
 --
 -- @
--- stack run uvector-vs-tba -- --output uvector-vs-tba.html
+-- stack bench alfred-margaret:uvector-vs-tba --ba '--output uvector-vs-tba.html'
 -- @
 --
--- You can pass a greater @--time-limit@ to increase the number of iterations.
+-- You can pass a greater @--time-limit@ (in the single quotes) to increase the number of iterations.
 module Main where
 
 import Control.Monad.ST (runST)
@@ -29,9 +29,13 @@ main = defaultMain
   , bgroup "uvector" $ mkReadBenchs readUVector genUVector [7, 8]
   ]
 
-mkReadBenchs :: (Int -> a -> Int) -> (Int -> a) -> [Int] -> [Benchmark]
-mkReadBenchs readPat gen powers =
-  [ bench (printf "%d reads" n) $ nf (readPat n) $ gen n
+mkReadBenchs
+  :: (Int -> a -> Int) -- ^ Function that reads from an array @n@ times.
+  -> (Int -> a)        -- ^ Function that constructs an array of length @n@.
+  -> [Int]             -- ^ Which powers of 10 to pass for @n@.
+  -> [Benchmark]
+mkReadBenchs readPattern gen powers =
+  [ bench (printf "%d reads" n) $ nf (readPattern n) $ gen n
   | n <- map (10^) powers
   ]
 
