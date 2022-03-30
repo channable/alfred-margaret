@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- | Microbenchmark to measure the difference in 'TypedByteArray' and 'Data.Vector.Unboxed.Vector' indexing performance.
--- The later is a slice into a 'ByteArray' which means that every time you retrieve and element, an offset
+-- The latter is a slice into a 'ByteArray' which means that every time you retrieve and element, an offset
 -- needs to be added to your index.
 --
 -- To reproduce:
@@ -53,7 +53,7 @@ readUVector !n !arr = go 0
       | i >= n    = 42
       | otherwise = go $ UVector.unsafeIndex arr i
 
--- NOTE: We should probably measure pseudo-random access time as well, e.g. by shuffing the generated arrays.
+-- NOTE: We should probably measure pseudo-random access time as well, e.g. by shuffling the generated arrays.
 
 genTba :: Int -> TBA.TypedByteArray Int
 genTba n = runST $ do
