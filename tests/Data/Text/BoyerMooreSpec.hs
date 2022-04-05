@@ -3,7 +3,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Data.Text.BoyerMooreSpec (spec) where
+module Data.Text.BoyerMooreSpec
+    ( spec
+    ) where
 
 import Control.DeepSeq (rnf)
 import Control.Monad (forM_)
@@ -30,6 +32,7 @@ import Data.Text.Orphans ()
 import qualified Data.Text.AhoCorasick.Replacer as AhoReplacer
 import qualified Data.Text.BoyerMoore.Automaton as BoyerMoore
 import qualified Data.Text.BoyerMoore.Replacer as Replacer
+import qualified Data.Text.BoyerMoore.Searcher as Searcher
 import qualified Data.Text.Utf16 as Utf16
 
 -- | Test that for a single needle which equals the haystack, we find a single
@@ -206,4 +209,33 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
         actual = Replacer.replaceSingleLimited case_ auto replacement haystack maxBound
       in
         actual `shouldBe` Just expected
+
+  describe "Searcher" $ do
+
+    describe "containsAny" $ do
+
+      -- For the edge case where a needle is the empty string,
+      -- 'Text.isInfixOf' and 'Searcher.containsAny' are different:
+      --
+      -- @
+      -- Text.isInfixOf "" "abc" == True /= False == Searcher.containsAny (Searcher.build [""]) "abc"
+      -- @
+      --
+      -- However, at this point we probably shouldn't break this property.
+      prop "is equivalent to disjunction of Text.isInfixOf calls*" $ \ (needles :: [Text]) (haystack :: Text) ->
+        let
+          searcher = Searcher.build CaseSensitive needles
+          test needle =
+            not (Text.null needle) && needle `Text.isInfixOf` haystack
+        in
+          Searcher.containsAny searcher haystack `shouldBe` any test needles
+
+    describe "containsAll" $ do
+      prop "is equivalent to conjunction of Text.isInfixOf calls*" $ \ (needles :: [Text]) (haystack :: Text) ->
+        let
+          searcher = Searcher.build CaseSensitive needles
+          test needle =
+            not (Text.null needle) && needle `Text.isInfixOf` haystack
+        in
+          Searcher.containsAll searcher haystack `shouldBe` all test needles
 

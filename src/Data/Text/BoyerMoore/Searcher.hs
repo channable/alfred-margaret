@@ -9,18 +9,17 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Data.Text.BoyerMoore.Searcher
-  ( Searcher
-  , build
-  , buildWithValues
-  , needles
-  , numNeedles
-  , automata
-  , caseSensitivity
-  , containsAny
-  , setSearcherCaseSensitivity
-  )
-  where
-
+    ( Searcher
+    , automata
+    , build
+    , buildWithValues
+    , caseSensitivity
+    , containsAll
+    , containsAny
+    , needles
+    , numNeedles
+    , setSearcherCaseSensitivity
+    ) where
 
 import Control.DeepSeq (NFData)
 import Data.Bifunctor (first)
@@ -123,3 +122,13 @@ containsAny !searcher !text =
         any (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
       IgnoreCase ->
         any (\(automaton, ()) -> BoyerMoore.runLower False f automaton text) (automata searcher)
+
+-- | Like 'containsAny', but checks whether all needles match instead.
+{-# NOINLINE containsAll #-}
+containsAll :: Searcher () -> Text -> Bool
+containsAll !searcher !text =
+  let
+    -- On the first match, return True immediately.
+    f _acc _match = BoyerMoore.Done True
+  in
+    all (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
