@@ -251,3 +251,12 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
             not (Text.null needle) && needle `Text.isInfixOf` haystack
         in
           Searcher.containsAny searcher haystack `shouldBe` any test needles
+
+    describe "containsAll" $ do
+      prop "is equivalent to conjunction of Text.isInfixOf calls*" $ \ (needles :: [Text]) (haystack :: Text) ->
+        let
+          searcher = Searcher.build needles
+          test needle =
+            not (Text.null needle) && needle `Text.isInfixOf` haystack
+        in
+          Searcher.containsAll searcher haystack `shouldBe` all test needles
