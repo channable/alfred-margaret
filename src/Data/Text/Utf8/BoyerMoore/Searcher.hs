@@ -13,6 +13,7 @@ module Data.Text.Utf8.BoyerMoore.Searcher
     , automata
     , build
     , buildWithValues
+    , containsAll
     , containsAny
     , needles
     , numNeedles
@@ -101,3 +102,13 @@ containsAny !searcher !text =
     f _acc _match = BoyerMoore.Done True
   in
     any (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
+
+-- | Like 'containsAny', but checks whether all needles match instead.
+{-# NOINLINE containsAll #-}
+containsAll :: Searcher () -> Text -> Bool
+containsAll !searcher !text =
+  let
+    -- On the first match, return True immediately.
+    f _acc _match = BoyerMoore.Done True
+  in
+    all (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
