@@ -255,7 +255,7 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
     describe "containsAll" $ do
       prop "is equivalent to conjunction of Text.isInfixOf calls*" $ \ (needles :: [Text]) (haystack :: Text) ->
         let
-          searcher = Searcher.build needles
+          searcher = Searcher.buildNeedleIdSearcher needles
           test needle =
             not (Text.null needle) && needle `Text.isInfixOf` haystack
         in
