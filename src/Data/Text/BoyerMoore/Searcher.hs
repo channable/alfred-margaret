@@ -12,6 +12,7 @@ module Data.Text.BoyerMoore.Searcher
     ( Searcher
     , automata
     , build
+    , buildNeedleIdSearcher
     , buildWithValues
     , caseSensitivity
     , containsAll
@@ -123,12 +124,18 @@ containsAny !searcher !text =
       IgnoreCase ->
         any (\(automaton, ()) -> BoyerMoore.runLower False f automaton text) (automata searcher)
 
+-- | Build a 'Searcher' that returns the needle's index in the needle list when it matches.
+buildNeedleIdSearcher :: CaseSensitivity -> [Text] -> Searcher Int
+buildNeedleIdSearcher !case_ !ns =
+  buildWithValues case_ $ zip ns [0..]
+
 -- | Like 'containsAny', but checks whether all needles match instead.
+-- Use 'buildNeedleIdSearcher' to get an appropriate 'Searcher'.
 {-# NOINLINE containsAll #-}
-containsAll :: Searcher () -> Text -> Bool
+containsAll :: Searcher Int -> Text -> Bool
 containsAll !searcher !text =
   let
     -- On the first match, return True immediately.
     f _acc _match = BoyerMoore.Done True
   in
-    all (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
+    all (\(automaton, _) -> BoyerMoore.runText False f automaton text) (automata searcher)
