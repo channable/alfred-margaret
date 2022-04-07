@@ -231,6 +231,7 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
           Searcher.containsAny searcher haystack `shouldBe` any test needles
 
     describe "containsAll" $ do
+
       prop "is equivalent to conjunction of Text.isInfixOf calls*" $ \ (needles :: [Text]) (haystack :: Text) ->
         let
           searcher = Searcher.buildNeedleIdSearcher CaseSensitive needles
@@ -239,3 +240,12 @@ spec = parallel $ modifyMaxSuccess (const 200) $ do
         in
           Searcher.containsAll searcher haystack `shouldBe` all test needles
 
+      prop "performs case-insensitive search as well" $ \ (needles :: [Text]) (haystack :: Text) ->
+        let
+          lowerNeedles = map Utf16.lowerUtf16 needles
+          lowerHaystack = Utf16.lowerUtf16 haystack
+          searcher = Searcher.buildNeedleIdSearcher IgnoreCase lowerNeedles
+          test needle =
+            not (Text.null needle) && needle `Text.isInfixOf` lowerHaystack
+        in
+          Searcher.containsAll searcher haystack `shouldBe` all test lowerNeedles

@@ -138,4 +138,8 @@ containsAll !searcher !text =
     -- On the first match, return True immediately.
     f _acc _match = BoyerMoore.Done True
   in
-    all (\(automaton, _) -> BoyerMoore.runText False f automaton text) (automata searcher)
+    case caseSensitivity searcher of
+      CaseSensitive ->
+        all (\(automaton, _) -> BoyerMoore.runText False f automaton text) (automata searcher)
+      IgnoreCase ->
+        all (\(automaton, _) -> BoyerMoore.runLower False f automaton text) (automata searcher)
