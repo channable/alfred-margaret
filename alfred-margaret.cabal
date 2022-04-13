@@ -41,15 +41,7 @@ Flag llvm
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Data.Text.AhoCorasick.Automaton
-                     , Data.Text.AhoCorasick.Replacer
-                     , Data.Text.AhoCorasick.Searcher
-                     , Data.Text.AhoCorasick.Splitter
-                     , Data.Text.BoyerMoore.Automaton
-                     , Data.Text.BoyerMoore.Replacer
-                     , Data.Text.BoyerMoore.Searcher
-                     , Data.Text.CaseSensitivity
-                     , Data.Text.Utf16
+  exposed-modules:     Data.Text.CaseSensitivity
                      , Data.Text.Utf8
                      , Data.Text.Utf8.AhoCorasick.Automaton
                      , Data.Text.Utf8.AhoCorasick.Replacer
@@ -65,7 +57,7 @@ library
     , deepseq          >= 1.4 && < 1.5
     , hashable         >= 1.2.7 && < 1.4
     , primitive        >= 0.6.4 && < 0.8
-    , text             >= 1.2.3 && < 1.3
+    , text             >= 2.0 && < 3.0
     , unordered-containers >= 0.2.9 && < 0.3
     , vector           >= 0.12 && < 0.13
     , bytestring       >= 0.10.12 && < 1
@@ -82,9 +74,7 @@ library
 test-suite test-suite
   type:                exitcode-stdio-1.0
   main-is:             Main.hs
-  other-modules:       Data.Text.AhoCorasickSpec
-                     , Data.Text.BoyerMooreSpec
-                     , Data.Text.Utf8.AhoCorasickSpec
+  other-modules:       Data.Text.Utf8.AhoCorasickSpec
                      , Data.Text.Utf8.BoyerMooreSpec
                      , Data.Text.Utf8.Utf8Spec
                      , Data.Text.Orphans
