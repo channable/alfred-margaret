@@ -13,10 +13,10 @@ module Data.Text.Utf8.AhoCorasickSpec where
 import Control.Monad (forM_)
 import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty ((:|)))
-import Data.Primitive (byteArrayFromList)
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (modifyMaxSize, prop)
 import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAll, forAllShrink)
+import Test.QuickCheck.Instances ()
 
 import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
@@ -223,7 +223,7 @@ spec = do
 -- helpers
 
 utf8Test :: Utf8.Text -> [Utf8.CodeUnit] -> Expectation
-utf8Test str byteList = str `shouldBe` Utf8.Text (byteArrayFromList byteList) 0 (length byteList)
+utf8Test str byteList = str `shouldBe` Utf8.fromByteList byteList
 
 -- From ./benchmark
 countMatches :: Aho.CaseSensitivity -> [Utf8.Text] -> Utf8.Text -> Int

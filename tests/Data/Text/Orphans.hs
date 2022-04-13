@@ -4,16 +4,11 @@ import Test.QuickCheck (Arbitrary (..))
 
 import qualified Test.QuickCheck.Gen as Gen
 
-import Data.Text.Utf8 as Utf8
-
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
+import Data.Text.Utf8
 
 instance Arbitrary CaseSensitivity where
   arbitrary = Gen.elements [CaseSensitive, IgnoreCase]
 
--- TODO: Slow placeholder implementation until we can use text-2.0
-instance Arbitrary Utf8.Text where
-  arbitrary = fmap Utf8.pack arbitrary
-
-instance Arbitrary Utf8.CodeUnitIndex where
-  arbitrary = fmap Utf8.CodeUnitIndex arbitrary
+instance Arbitrary CodeUnitIndex where
+  arbitrary = fmap CodeUnitIndex arbitrary

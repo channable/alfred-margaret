@@ -6,6 +6,8 @@ haskellPackages:
     primitive
     text
     unordered-containers
+    hspec
+    hspec-expectations
 
     # Transitive dependencies
     attoparsec
