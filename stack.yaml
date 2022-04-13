@@ -1,4 +1,4 @@
-resolver: lts-18.27
+resolver: ghc-8.10.7
 packages:
 - .
 
@@ -7,5 +7,6 @@ packages:
 # On NixOS this section is needed to bring the non-Haskell dependencies
 # into scope.
 nix:
-  packages:
-    - zlib
+  enable: true
+  shell-file: stack-shell.nix
+  path: ["nixpkgs=./nix/nixpkgs-pinned.nix"]
