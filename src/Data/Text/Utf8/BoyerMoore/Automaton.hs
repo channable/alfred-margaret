@@ -43,13 +43,16 @@ import GHC.Generics (Generic)
 import qualified Data.Aeson as AE
 #endif
 
-import Data.Text.AhoCorasick.Automaton (Next (..))
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (..), Text)
 import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.TypedByteArray as TBA
+
+data Next a
+  = Done !a
+  | Step !a
 
 -- | A Boyer-Moore automaton is based on lookup-tables that allow skipping through the haystack.
 -- This allows for sub-linear matching in some cases, as we do not have to look at every input
