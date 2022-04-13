@@ -8,9 +8,6 @@ let
 
     # Haskell tooling
     pkgs.stack
-    pkgs.haskellPackages.haskell-language-server
-    pkgs.haskellPackages.implicit-hie
-    pkgs.haskellPackages.stylish-haskell
 
     # Other
     pkgs.llvm_9
