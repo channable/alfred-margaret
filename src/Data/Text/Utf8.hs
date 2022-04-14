@@ -99,17 +99,17 @@ newtype CodeUnitIndex = CodeUnitIndex
 
 {-# INLINABLE unpackUtf8 #-}
 unpackUtf8 :: Text -> [CodeUnit]
-unpackUtf8 (Text u8data offset length) =
+unpackUtf8 (Text u8data offset len) =
   let
     go _ 0 = []
     go i n = unsafeIndexCodeUnit' u8data (CodeUnitIndex i) : go (i + 1) (n - 1)
   in
-    go offset length
+    go offset len
 
 -- | The return value of this function is not really an index.
 -- However the signature is supposed to make it clear that the length is returned in terms of code units, not code points.
 lengthUtf8 :: Text -> CodeUnitIndex
-lengthUtf8 (Text _ _ !length) = CodeUnitIndex length
+lengthUtf8 (Text _ _ !len) = CodeUnitIndex len
 
 -- | Lower-case the ASCII code points A-Z and leave the rest of ASCII intact.
 {-# INLINE toLowerAscii #-}
@@ -144,7 +144,7 @@ unicode2utf8 c
 
 fromByteList :: [Word8] -> Text
 fromByteList byteList = Text (TextArray.ByteArray ba) 0 (length byteList)
-  where ByteArray ba = byteArrayFromList byteList
+  where !(ByteArray ba) = byteArrayFromList byteList
 
 -- $decoding
 --
@@ -270,14 +270,14 @@ unsafeCutUtf8 :: CodeUnitIndex -- ^ Starting position of substring.
   -> CodeUnitIndex -- ^ Length of substring.
   -> Text -- ^ Initial string.
   -> (Text, Text)
-unsafeCutUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) !text =
+unsafeCutUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !len) !text =
   ( TextUnsafe.takeWord8 begin text
-  , TextUnsafe.dropWord8 (begin + length) text
+  , TextUnsafe.dropWord8 (begin + len) text
   )
 
 unsafeSliceUtf8 :: CodeUnitIndex -> CodeUnitIndex -> Text -> Text
-unsafeSliceUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !length) !text =
-  TextUnsafe.takeWord8 length $ TextUnsafe.dropWord8 begin text
+unsafeSliceUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !len) !text =
+  TextUnsafe.takeWord8 len $ TextUnsafe.dropWord8 begin text
 
 -- $generalFunctions
 --
