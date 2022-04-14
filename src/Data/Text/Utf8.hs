@@ -9,6 +9,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MagicHash #-}
 
 -- | This module provides functions that allow treating 'Text' values as series of UTF-8 code units
 -- instead of characters. Any calls to 'Text' in @alfred-margaret@ go through this module.
@@ -37,14 +38,19 @@ module Data.Text.Utf8
       -- $indexing
     , indexCodeUnit
     , unsafeIndexCodePoint
-    , unsafeIndexCodePoint'
     , unsafeIndexCodeUnit
-    , unsafeIndexCodeUnit'
       -- * Slicing Functions
       --
       -- $slicingFunctions
     , unsafeCutUtf8
     , unsafeSliceUtf8
+      -- * Functions on Arrays
+      --
+      -- $functionsOnArrays
+    , arrayContents
+    , isArrayPinned
+    , unsafeIndexCodePoint'
+    , unsafeIndexCodeUnit'
       -- * General Functions
       --
       -- $generalFunctions
@@ -74,6 +80,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Array as TextArray
 import qualified Data.Text.Internal.Search as TextSearch
 import qualified Data.Text.Unsafe as TextUnsafe
+import qualified GHC.Exts as Exts
 
 -- | A UTF-8 code unit is a byte. A Unicode code point can be encoded as up to four code units.
 type CodeUnit = Word8
@@ -141,8 +148,8 @@ unicode2utf8 c
     | otherwise   = [0xf0 .|. (c `shiftR` 18), 0x80 .|. (0x3f .&. (c `shiftR` 12)), 0x80 .|. (0x3f .&. (c `shiftR` 6)), 0x80 .|. (0x3f .&. c)]
 
 fromByteList :: [Word8] -> Text
-fromByteList byteList = Text (TextArray.ByteArray ba) 0 (length byteList)
-  where !(ByteArray ba) = byteArrayFromList byteList
+fromByteList byteList = Text (TextArray.ByteArray ba#) 0 (length byteList)
+  where !(ByteArray ba#) = byteArrayFromList byteList
 
 -- $decoding
 --
@@ -196,21 +203,6 @@ decodeUtf8 cus = error $ "Invalid UTF-8 input sequence at " ++ show (take 4 cus)
 -- A 'CodePoint' is a 21-bit Unicode code point and can consist of up to four code units.
 -- A 'CodeUnit' is a single byte.
 
--- | Decode a code point at the given 'CodeUnitIndex'.
--- Returns garbage if there is no valid code point at that position.
--- Does not perform bounds checking.
--- See 'decode2', 'decode3' and 'decode4' for the expected format of multi-byte code points.
-{-# INLINE unsafeIndexCodePoint' #-}
-unsafeIndexCodePoint' :: TextArray.Array -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
-unsafeIndexCodePoint' !u8data (CodeUnitIndex !idx)
-  | cu0 < 0xc0 = (1, Char.chr $ fromIntegral cu0)
-  | cu0 < 0xe0 = (2, decode2 cu0 (cuAt 1))
-  | cu0 < 0xf0 = (3, decode3 cu0 (cuAt 1) (cuAt 2))
-  | otherwise = (4, decode4 cu0 (cuAt 1) (cuAt 2) (cuAt 3))
-  where
-    cuAt !i = unsafeIndexCodeUnit' u8data $ CodeUnitIndex $ idx + i
-    !cu0 = cuAt 0
-
 -- | Does exactly the same thing as 'unsafeIndexCodePoint'', but on 'Text' values.
 {-# INLINE unsafeIndexCodePoint #-}
 unsafeIndexCodePoint :: Text -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
@@ -224,10 +216,6 @@ indexCodeUnit :: Text -> CodeUnitIndex -> CodeUnit
 indexCodeUnit !text (CodeUnitIndex !index)
   | index < 0 || index >= codeUnitIndex (lengthUtf8 text) = error $ "Index out of bounds " ++ show index
   | otherwise = unsafeIndexCodeUnit text $ CodeUnitIndex index
-
-{-# INLINE unsafeIndexCodeUnit' #-}
-unsafeIndexCodeUnit' :: TextArray.Array -> CodeUnitIndex -> CodeUnit
-unsafeIndexCodeUnit' !u8data (CodeUnitIndex !idx) = TextArray.unsafeIndex u8data idx
 
 {-# INLINE unsafeIndexCodeUnit #-}
 unsafeIndexCodeUnit :: Text -> CodeUnitIndex -> CodeUnit
@@ -276,6 +264,37 @@ unsafeCutUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !len) !text =
 unsafeSliceUtf8 :: CodeUnitIndex -> CodeUnitIndex -> Text -> Text
 unsafeSliceUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !len) !text =
   TextUnsafe.takeWord8 len $ TextUnsafe.dropWord8 begin text
+
+-- $functionsOnArrays
+--
+-- Functions for working with 'TextArray.Array' values.
+
+-- | See 'Data.Primitive.isByteArrayPinned'.
+isArrayPinned :: TextArray.Array -> Bool
+isArrayPinned (TextArray.ByteArray ba#) = Exts.isTrue# (Exts.isByteArrayPinned# ba#)
+
+-- | See 'Data.Primitive.byteArrayContents'.
+arrayContents :: TextArray.Array -> Exts.Ptr Word8
+arrayContents (TextArray.ByteArray ba#) = Exts.Ptr (Exts.byteArrayContents# ba#)
+
+-- | Decode a code point at the given 'CodeUnitIndex'.
+-- Returns garbage if there is no valid code point at that position.
+-- Does not perform bounds checking.
+-- See 'decode2', 'decode3' and 'decode4' for the expected format of multi-byte code points.
+{-# INLINE unsafeIndexCodePoint' #-}
+unsafeIndexCodePoint' :: TextArray.Array -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
+unsafeIndexCodePoint' !u8data (CodeUnitIndex !idx)
+  | cu0 < 0xc0 = (1, Char.chr $ fromIntegral cu0)
+  | cu0 < 0xe0 = (2, decode2 cu0 (cuAt 1))
+  | cu0 < 0xf0 = (3, decode3 cu0 (cuAt 1) (cuAt 2))
+  | otherwise = (4, decode4 cu0 (cuAt 1) (cuAt 2) (cuAt 3))
+  where
+    cuAt !i = unsafeIndexCodeUnit' u8data $ CodeUnitIndex $ idx + i
+    !cu0 = cuAt 0
+
+{-# INLINE unsafeIndexCodeUnit' #-}
+unsafeIndexCodeUnit' :: TextArray.Array -> CodeUnitIndex -> CodeUnit
+unsafeIndexCodeUnit' !u8data (CodeUnitIndex !idx) = TextArray.unsafeIndex u8data idx
 
 -- $generalFunctions
 --

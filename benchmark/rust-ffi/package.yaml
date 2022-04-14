@@ -23,14 +23,16 @@ ghc-options: >-
   +RTS -A64m -RTS
 
 executables:
-  ac-bench:
+  ac-bench-ffi:
     dependencies:
     - alfred-margaret
     - base
+    - bytestring
     - clock
     - ghc-compact
     - deepseq
     - primitive
+    - text
     ghc-options:
     - -rtsopts
     - -threaded
