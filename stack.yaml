@@ -1,6 +1,7 @@
 resolver: ghc-9.0.2
 packages:
 - .
+- benchmark/haskell
 
 # Note: This section will be ignored by stack, on non-NixOS systems.
 # It can be explicitly enabled on non-NixOS systems by passing --nix.

@@ -1,7 +1,7 @@
 haskellPackages:
   with haskellPackages; [
-    # Direct dependencies
     aeson
+    bytestring
     hashable
     primitive
     text

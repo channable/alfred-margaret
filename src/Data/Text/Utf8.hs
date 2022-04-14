@@ -55,7 +55,6 @@ module Data.Text.Utf8
     , Text.pack
     , Text.replicate
     , Text.unpack
-    , TextIO.readFile
     , TextSearch.indices
     ) where
 
@@ -73,7 +72,6 @@ import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Char as Char
 import qualified Data.Text as Text
 import qualified Data.Text.Array as TextArray
-import qualified Data.Text.IO as TextIO
 import qualified Data.Text.Internal.Search as TextSearch
 import qualified Data.Text.Unsafe as TextUnsafe
 
