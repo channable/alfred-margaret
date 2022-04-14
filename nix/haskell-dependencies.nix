@@ -2,6 +2,7 @@ haskellPackages:
   with haskellPackages; [
     aeson
     bytestring
+    criterion
     hashable
     primitive
     text
