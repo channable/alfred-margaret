@@ -38,7 +38,7 @@ blocks:
       jobs:
         - name: Test alfred-margaret
           commands:
-            - nix run -c stack test
+            - nix run -c stack test alfred-margaret:test-suite
             - du -h ~/.stack
             - du -h .stack-work
 
