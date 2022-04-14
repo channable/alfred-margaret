@@ -22,8 +22,8 @@ blocks:
           # Set up /nix with correct permissions
           - sudo mkdir /nix
           - sudo chown semaphore:semaphore /nix
-          # Restore any stack cache that we can find
-          - cache restore stack-cache
+          # Restore any nix cache that we can find
+          - cache restore nix-store-
           # Install Nix
           - curl -o install-nix https://releases.nixos.org/nix/nix-2.3.15/install
           - sha256sum --check .semaphore/install-nix.sha256
@@ -39,6 +39,8 @@ blocks:
         - name: Test alfred-margaret
           commands:
             - nix run -c stack test
+            - du -h ~/.stack
+            - du -h .stack-work
 
       epilogue:
         commands:
