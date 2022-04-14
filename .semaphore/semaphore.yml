@@ -4,7 +4,7 @@ name: "Semaphore pipeline for alfred-margaret"
 agent:
   machine:
     type: e1-standard-2
-    os_image: ubuntu1804
+    os_image: ubuntu2004
 
 # Automatically cancel jobs that are already running for all branches but master
 auto_cancel:
@@ -18,22 +18,34 @@ blocks:
         commands:
           # Checkout out the repository
           - checkout
-          - git status
+          - git log --max-count 1 --oneline --no-decorate
+          # Set up /nix with correct permissions
+          - sudo mkdir /nix
+          - sudo chown semaphore:semaphore /nix
+          # Restore any stack cache that we can find
+          - cache restore stack-cache
+          # Install Nix
+          - curl -o install-nix https://releases.nixos.org/nix/nix-2.3.15/install
+          - sha256sum --check .semaphore/install-nix.sha256
+          - sh ./install-nix --no-daemon
+          - source "$HOME/.nix-profile/etc/profile.d/nix.sh"
+          # Configure cachix *without building the environment in default.nix*
+          - nix run -f nix/nixpkgs-pinned.nix cachix -c cachix use channable-public
           # Restore .stack-work and ~/.stack from cache for faster builds
           - cache restore home-stack-$SEMAPHORE_GIT_BRANCH
           - cache restore stack-work-$SEMAPHORE_GIT_BRANCH
-          # Install stack, upgrade it to latest version and add it to PATH
-          - sudo apt-get install haskell-stack
-          - stack upgrade --binary-only --binary-version=2.7.3
-          - export PATH=~/.local/bin:$PATH
 
       jobs:
         - name: Test alfred-margaret
           commands:
-            - stack test
+            - nix run -c stack test
 
       epilogue:
         commands:
           # Fill caches
           - cache store home-stack-$SEMAPHORE_GIT_BRANCH ~/.stack
           - cache store stack-work-$SEMAPHORE_GIT_BRANCH .stack-work
+          # Store a copy of the nix store. This will be refreshed daily, which
+          # is more than sufficient for this repo. Semaphore's cache is faster
+          # than Cachix.
+          - "cache store nix-store-$(date -u -Idate) /nix"
