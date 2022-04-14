@@ -11,8 +11,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | This module provides functions that allow treating 'Text' values as series of UTF-8 code units
--- instead of characters. Currently, it also contains a stub 'Text' type which treats its internal byte array
--- as UTF-8 encoded. We use this as a placeholder until we can use @text-2@.
+-- instead of characters. Any calls to 'Text' in @alfred-margaret@ go through this module.
+-- Therefore we re-export some 'Text' functions, e.g. 'Text.concat'.
 module Data.Text.Utf8
     ( CodePoint
     , CodeUnit
@@ -281,7 +281,4 @@ unsafeSliceUtf8 (CodeUnitIndex !begin) (CodeUnitIndex !len) !text =
 
 -- $generalFunctions
 --
--- These functions are available in @text@ as well and should be removed once this library moves to @text-2@.
--- You should be able to use these by doing @import qualified Data.Text.Utf8 as Text@ just like you would with @text@.
---
--- NOTE: The 'Text' instances for @Show@, @Eq@, @Ord@, @IsString@, @FromJSON@, @ToJSON@ and @Hashable@ in this file also fall in this category.
+-- Re-exported from 'Text'.
