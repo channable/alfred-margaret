@@ -8,11 +8,5 @@ haskellPackages:
     unordered-containers
     hspec
     hspec-expectations
-
-    # Transitive dependencies
-    attoparsec
-    OneTuple
     quickcheck-instances
-    semialign
-    text-short
   ]
