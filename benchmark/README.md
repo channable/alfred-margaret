@@ -1,12 +1,19 @@
 # benchmark
 
 This is the code used to benchmark `alfred-margaret`.
-The results of this benchmark are shown in [Channable blog article](https://www.channable.com/tech/how-we-made-haskell-search-strings-as-fast-as-rust).
+The results of this benchmark are shown in this [Channable tech blog article](https://www.channable.com/tech/how-we-made-haskell-search-strings-as-fast-as-rust).
 
 ## Setup
 
-Running `nix-shell` in this directory drops you into a shell where the build tools `cargo`, `bazel`, `stack` and the required python packages are available.
-The first time you do this will likely take a while unless you've already downloaded those packages.
+We use Nix to manage dependencies such as `cargo`, `bazel`, `stack` and the required python packages.
+In order to drop into a environment containing these, run:
+
+```
+# In the repository root (alfred-margaret folder)
+nix run --arg benchTools true -c $SHELL
+```
+
+The first time you do this will likely take a while unless you've already downloaded those packages (some 5 GiB).
 
 ## Running the Benchmarks
 
@@ -24,7 +31,7 @@ The first part of this file defines the search terms (the "needles") `Lorem`, `s
 The second part, after a blank line, defines the corpus to search in  (the "haystack").
 Currently, these files **must be encoded as UTF-16 Little-Endian without BOM**.
 
-Each run of `benchmark.py` generates a pair for `.results` and `.stats` files.
+Each run of `benchmark.py` generates a pair of `.results` and `.stats` files.
 
 ### Python
 
@@ -73,24 +80,10 @@ stack build
 Run the benchmark using the compiled binary:
 
 ```
-./benchmark.py haskell/.stack-work/dist/*/Cabal-*/build/ac-bench/ac-bench --prefix haskell
+./benchmark.py haskell/.stack-work/path/to/ac-bench --prefix haskell --data-directory data-utf8
 ```
 
-### Haskell, UTF-8 Version
-
-In `text-2.0` and above, the `Text` type will use UTF-8 under the hood.
-The `haskell-utf8` directory contains a preliminary benchmark for `alfred-margaret` using UTF-8 byte arrays.
-To compile it, run Stack with the `utf8` flag in the `haskell` directory:
-
-```
-stack build --flag ac-bench:utf8
-```
-
-Run the benchmark using the compiled binary:
-
-```
-./benchmark.py haskell/.stack-work/dist/*/Cabal-*/build/ac-bench/ac-bench --prefix haskell-utf8 --data-directory data-utf8
-```
+You can figure out `path/to/ac-bench` by running `stack run --verbose ac-bench`.
 
 Note that you must first convert the data files for the benchmark into UTF-8 and put them in `data-utf8`.
 You can use `iconv` for this:
@@ -117,7 +110,7 @@ stack build
 Run the benchmark using the compiled binary:
 
 ```
-./benchmark.py rust-ffi/.stack-work/dist/*/Cabal-*/build/ac-bench/ac-bench --prefix rust-ffi --data-directory data-utf8
+./benchmark.py rust-ffi/.stack-work/path/to/ac-bench --prefix rust-ffi --data-directory data-utf8
 ```
 
 Since this version uses the UTF-8 as well, you have to generate the UTF-8 data first as described in the previous section.
