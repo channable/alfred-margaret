@@ -8,7 +8,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Data.Text.Utf8.BoyerMoore.Searcher
+module Data.Text.BoyerMoore.Searcher
     ( Searcher
     , automata
     , build
@@ -27,9 +27,9 @@ import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
 import GHC.Generics (Generic)
 
 import Data.Text.Utf8 (Text)
-import Data.Text.Utf8.BoyerMoore.Automaton (Automaton)
+import Data.Text.BoyerMoore.Automaton (Automaton)
 
-import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
+import qualified Data.Text.BoyerMoore.Automaton as BoyerMoore
 
 
 -- | A set of needles with associated values, and Boyer-Moore automata to

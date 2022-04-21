@@ -11,7 +11,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 
 -- | Implements sequential string replacements based on the Aho-Corasick algorithm.
-module Data.Text.Utf8.AhoCorasick.Replacer
+module Data.Text.AhoCorasick.Replacer
     ( -- * State machine
       Needle
     , Payload (..)
@@ -35,11 +35,11 @@ import qualified Data.Aeson as AE
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnitIndex, Text)
-import Data.Text.Utf8.AhoCorasick.Searcher (Searcher)
+import Data.Text.AhoCorasick.Searcher (Searcher)
 
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
-import qualified Data.Text.Utf8.AhoCorasick.Searcher as Searcher
+import qualified Data.Text.AhoCorasick.Automaton as Aho
+import qualified Data.Text.AhoCorasick.Searcher as Searcher
 
 -- | Descriptive type alias for strings to search for.
 type Needle = Text

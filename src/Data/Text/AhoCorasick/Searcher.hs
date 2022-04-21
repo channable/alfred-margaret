@@ -11,7 +11,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
-module Data.Text.Utf8.AhoCorasick.Searcher
+module Data.Text.AhoCorasick.Searcher
     ( Searcher
     , automaton
     , build
@@ -39,7 +39,7 @@ import qualified Data.IntSet as IS
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (Text)
 
-import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
+import qualified Data.Text.AhoCorasick.Automaton as Aho
 
 -- | A set of needles with associated values, and an Aho-Corasick automaton to
 -- efficiently find those needles.

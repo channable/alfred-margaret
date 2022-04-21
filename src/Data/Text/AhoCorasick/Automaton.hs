@@ -28,7 +28,7 @@
 --
 -- This module is a rewrite of the previous version which used an older version of
 -- the 'text' package which in turn used UTF-16 internally.
-module Data.Text.Utf8.AhoCorasick.Automaton
+module Data.Text.AhoCorasick.Automaton
     ( AcMachine (..)
     , CaseSensitivity (..)
     , CodeUnitIndex (..)

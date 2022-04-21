@@ -8,7 +8,7 @@
 {-# LANGUAGE CPP #-}
 
 -- | Splitting strings using Aho–Corasick.
-module Data.Text.Utf8.AhoCorasick.Splitter
+module Data.Text.AhoCorasick.Splitter
     ( Splitter
     , automaton
     , build
@@ -31,10 +31,10 @@ import qualified Data.Aeson as AE
 
 import qualified Data.List.NonEmpty as NonEmpty
 
-import Data.Text.Utf8.AhoCorasick.Automaton (AcMachine)
+import Data.Text.AhoCorasick.Automaton (AcMachine)
 
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
+import qualified Data.Text.AhoCorasick.Automaton as Aho
 
 --------------------------------------------------------------------------------
 -- Splitter

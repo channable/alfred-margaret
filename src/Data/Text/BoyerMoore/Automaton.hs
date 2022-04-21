@@ -20,7 +20,7 @@
 --
 -- The algorithm here can be potentially improved by including the Galil rule
 -- (https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string-search_algorithm#The_Galil_rule)
-module Data.Text.Utf8.BoyerMoore.Automaton
+module Data.Text.BoyerMoore.Automaton
     ( Automaton
     , CaseSensitivity (..)
     , CodeUnitIndex (..)

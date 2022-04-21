@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Data.Text.Utf8.Utf8Spec where
+module Data.Text.Utf8Spec where
 
 import Control.Monad (forM_)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)

@@ -21,7 +21,7 @@ import qualified System.Environment as Env
 import Data.Text.Utf8 (CodeUnitIndex(..), Text (..))
 
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
+import qualified Data.Text.AhoCorasick.Automaton as Aho
 
 readNeedleHaystackFile :: FilePath -> IO ([Text], Text)
 readNeedleHaystackFile path = do

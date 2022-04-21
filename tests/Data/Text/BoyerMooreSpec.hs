@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Data.Text.Utf8.BoyerMooreSpec
+module Data.Text.BoyerMooreSpec
     ( spec
     ) where
 
@@ -23,17 +23,17 @@ import Test.QuickCheck.Instances ()
 import qualified Test.QuickCheck as QuickCheck
 import qualified Test.QuickCheck.Gen as Gen
 
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Orphans ()
 import Data.Text.Utf8 (Text)
-import Data.Text.Utf8.BoyerMoore.Automaton (CaseSensitivity (..))
 
 import qualified Data.Text.Utf8 as Text
 import qualified Data.Text.Utf8 as TextSearch
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.Text.Utf8.AhoCorasick.Replacer as AhoReplacer
-import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
-import qualified Data.Text.Utf8.BoyerMoore.Replacer as Replacer
-import qualified Data.Text.Utf8.BoyerMoore.Searcher as Searcher
+import qualified Data.Text.AhoCorasick.Replacer as AhoReplacer
+import qualified Data.Text.BoyerMoore.Automaton as BoyerMoore
+import qualified Data.Text.BoyerMoore.Replacer as Replacer
+import qualified Data.Text.BoyerMoore.Searcher as Searcher
 
 -- | Test that for a single needle which equals the haystack, we find a single
 -- match. Does not apply to the empty needle.

@@ -8,7 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Data.Text.Utf8.AhoCorasickSpec where
+module Data.Text.AhoCorasickSpec where
 
 import Control.Monad (forM_)
 import Data.Foldable (foldl')
@@ -27,10 +27,10 @@ import Data.Text.Utf8 (Text)
 
 import qualified Data.Text.Utf8 as Text
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.Text.Utf8.AhoCorasick.Automaton as Aho
-import qualified Data.Text.Utf8.AhoCorasick.Replacer as Replacer
-import qualified Data.Text.Utf8.AhoCorasick.Searcher as Searcher
-import qualified Data.Text.Utf8.AhoCorasick.Splitter as Splitter
+import qualified Data.Text.AhoCorasick.Automaton as Aho
+import qualified Data.Text.AhoCorasick.Replacer as Replacer
+import qualified Data.Text.AhoCorasick.Searcher as Searcher
+import qualified Data.Text.AhoCorasick.Splitter as Splitter
 
 spec :: Spec
 spec = do

@@ -45,13 +45,13 @@ library
   hs-source-dirs:      src
   exposed-modules:     Data.Text.CaseSensitivity
                      , Data.Text.Utf8
-                     , Data.Text.Utf8.AhoCorasick.Automaton
-                     , Data.Text.Utf8.AhoCorasick.Replacer
-                     , Data.Text.Utf8.AhoCorasick.Searcher
-                     , Data.Text.Utf8.AhoCorasick.Splitter
-                     , Data.Text.Utf8.BoyerMoore.Automaton
-                     , Data.Text.Utf8.BoyerMoore.Replacer
-                     , Data.Text.Utf8.BoyerMoore.Searcher
+                     , Data.Text.AhoCorasick.Automaton
+                     , Data.Text.AhoCorasick.Replacer
+                     , Data.Text.AhoCorasick.Searcher
+                     , Data.Text.AhoCorasick.Splitter
+                     , Data.Text.BoyerMoore.Automaton
+                     , Data.Text.BoyerMoore.Replacer
+                     , Data.Text.BoyerMoore.Searcher
                      , Data.TypedByteArray
   build-depends:
       base             >= 4.7 && < 5
@@ -77,9 +77,9 @@ library
 test-suite test-suite
   type:                exitcode-stdio-1.0
   main-is:             Main.hs
-  other-modules:       Data.Text.Utf8.AhoCorasickSpec
-                     , Data.Text.Utf8.BoyerMooreSpec
-                     , Data.Text.Utf8.Utf8Spec
+  other-modules:       Data.Text.AhoCorasickSpec
+                     , Data.Text.BoyerMooreSpec
+                     , Data.Text.Utf8Spec
                      , Data.Text.Orphans
   hs-source-dirs:      tests
   ghc-options:         -Wall -Wincomplete-record-updates -Wno-orphans

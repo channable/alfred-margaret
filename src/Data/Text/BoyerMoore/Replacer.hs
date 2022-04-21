@@ -7,17 +7,17 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Data.Text.Utf8.BoyerMoore.Replacer
+module Data.Text.BoyerMoore.Replacer
     ( -- Replacer
       replaceSingleLimited
     ) where
 
 import Data.Text.Utf8 (Text)
-import Data.Text.Utf8.BoyerMoore.Automaton (Automaton, CodeUnitIndex)
+import Data.Text.BoyerMoore.Automaton (Automaton, CodeUnitIndex)
 
 import qualified Data.Text.Utf8 as Text
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.Text.Utf8.BoyerMoore.Automaton as BoyerMoore
+import qualified Data.Text.BoyerMoore.Automaton as BoyerMoore
 
 -- | Replace all occurrences matched by the Boyer-Moore automaton
 -- with the given replacement text in some haystack.
