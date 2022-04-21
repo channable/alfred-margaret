@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.2.0 - "ByteArray Boogaloo" (2022-04-21)
+
+Added UTF-8 implementations on a mock `Text` type (in `Data.Text.Utf8`).
+
+- Added `Data.Text.Utf8*` modules
+- Moved `CaseSensitivity` to its own `Data.Text.CaseSensitivity` module.
+- Added the private module `Data.TypedByteArray` which contains thin wrappers over `ByteArray` and `MutableByteArray`.
+- Replaced uses of `Data.Vector.Unboxed.Vector` by `TypedByteArray`.
+
 ## v1.1.0.0 - "Moore Features" (2020-10-13)
 
 The most notable addition in this release is the implementation of the Boyer-Moore string search algorithm.
