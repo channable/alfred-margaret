@@ -175,4 +175,4 @@ containsAll !searcher !haystack =
 
   in IS.null $ case caseSensitivity searcher of
     CaseSensitive -> Aho.runText initial f ac haystack
-    IgnoreCase   -> Aho.runLower initial f ac haystack
+    IgnoreCase -> Aho.runLower initial f ac haystack

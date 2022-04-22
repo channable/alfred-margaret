@@ -14,11 +14,9 @@ build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
 tested-with:
-                     -- Stackage LTS 13.10.
-                     GHC == 8.6.3
-                     -- Stackage LTS 16.18.
-                   , GHC == 8.8.4
-                     -- Stackage LTS 18.27
+                     -- Nixpkgs unstable (Updated 2022-04-14)
+                     GHC == 8.8.4
+                     -- Nixpkgs unstable (Updated 2022-04-14)
                    , GHC == 8.10.7
                      -- Nixpkgs unstable (Updated 2022-04-14)
                    , GHC == 9.0.2
