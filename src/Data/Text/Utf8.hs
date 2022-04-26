@@ -20,6 +20,7 @@ module Data.Text.Utf8
     , CodeUnitIndex (..)
     , Text (..)
     , fromByteList
+    , isCaseInvariant
     , lengthUtf8
     , lowerCodePoint
     , lowerUtf8
@@ -150,6 +151,13 @@ unicode2utf8 c
 fromByteList :: [Word8] -> Text
 fromByteList byteList = Text (TextArray.ByteArray ba#) 0 (length byteList)
   where !(ByteArray ba#) = byteArrayFromList byteList
+
+-- | Return whether text is the same lowercase as uppercase, such that this
+-- function will not return true when Aho–Corasick would differentiate when
+-- doing case-insensitive matching.
+{-# INLINE isCaseInvariant #-}
+isCaseInvariant :: Text -> Bool
+isCaseInvariant = Text.all (\c -> Char.toLower c == Char.toUpper c)
 
 -- $decoding
 --
