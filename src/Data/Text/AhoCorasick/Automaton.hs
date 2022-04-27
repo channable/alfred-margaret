@@ -52,6 +52,7 @@ import GHC.Generics (Generic)
 import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
+import qualified Data.Text.Unsafe as Text.Unsafe
 import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
@@ -463,10 +464,10 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     consumeInput !offset !acc !_state
       | offset >= limit = acc
     consumeInput !offset !acc !state =
-      followCodePoint (offset + codeUnits) acc possiblyLoweredCp state
+      followCodePoint (offset + CodeUnitIndex codeUnits) acc possiblyLoweredCp state
 
       where
-        (!codeUnits, !cp) = Utf8.unsafeIndexCodePoint' u8data offset
+        Text.Unsafe.Iter !cp !codeUnits = Text.Unsafe.iterArray u8data $ Utf8.codeUnitIndex offset
 
         !possiblyLoweredCp = case caseSensitivity of
           CaseSensitive -> cp
