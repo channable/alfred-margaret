@@ -422,9 +422,9 @@ data Next a = Done !a | Step !a
 -- NOTE: @followCodePoint@ is actually inlined into @consumeInput@ by GHC.
 -- It is included in the diagram for illustrative reasons only.
 --
--- All of these functions have the arguments @offset@, @remaining@, @state@ and @acc@ which encode the current input
+-- All of these functions have the arguments @offset@, @state@ and @acc@ which encode the current input
 -- position and the accumulator, which contains the matches. If you change any of the functions above,
--- make sure to check the Core dumps afterwards that @offset@, @remaining@ and @state@ were turned
+-- make sure to check the Core dumps afterwards that @offset@ and @state@ were turned
 -- into unboxed @Int#@ by GHC. If any of them aren't, the program will constantly allocate and deallocate heap space for them.
 -- You can nudge GHC in the right direction by using bang patterns on these arguments.
 --
@@ -435,7 +435,7 @@ data Next a = Done !a | Step !a
 {-# INLINE runWithCase #-}
 runWithCase :: forall a v. CaseSensitivity -> a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runWithCase !caseSensitivity !seed !f !machine !text =
-  consumeInput initialOffset initialRemaining seed initialState
+  consumeInput initialOffset seed initialState
   where
     initialState = 0
 
@@ -443,7 +443,7 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     AcMachine !values !transitions !offsets !rootAsciiTransitions = machine
 
     !initialOffset = CodeUnitIndex off
-    !initialRemaining = CodeUnitIndex len
+    !limit = CodeUnitIndex $ off + len
 
     -- NOTE: All of the arguments are strict here, because we want to compile
     -- them down to unpacked variables on the stack, or even registers.
@@ -459,10 +459,11 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     -- | Consume a code unit sequence that constitutes a full code point.
     -- If the code unit at @offset@ is ASCII, we can lower it using 'Utf8.toLowerAscii'.
     {-# NOINLINE consumeInput #-}
-    consumeInput :: CodeUnitIndex -> CodeUnitIndex -> a -> State -> a
-    consumeInput !_offset 0 !acc !_state = acc
-    consumeInput !offset !remaining !acc !state =
-      followCodePoint (offset + codeUnits) (remaining - codeUnits) acc possiblyLoweredCp state
+    consumeInput :: CodeUnitIndex -> a -> State -> a
+    consumeInput !offset !acc !_state
+      | offset >= limit = acc
+    consumeInput !offset !acc !state =
+      followCodePoint (offset + codeUnits) acc possiblyLoweredCp state
 
       where
         (!codeUnits, !cp) = Utf8.unsafeIndexCodePoint' u8data offset
@@ -472,31 +473,31 @@ runWithCase !caseSensitivity !seed !f !machine !text =
           IgnoreCase -> Utf8.lowerCodePoint cp
 
     {-# INLINE followCodePoint #-}
-    followCodePoint :: CodeUnitIndex -> CodeUnitIndex -> a -> CodePoint -> State -> a
-    followCodePoint !offset !remaining !acc !cp !state
-      | state == initialState && Char.ord cp < asciiCount = lookupRootAsciiTransition offset remaining acc cp
-      | otherwise = lookupTransition offset remaining acc cp state $ offsets `uAt` state
+    followCodePoint :: CodeUnitIndex -> a -> CodePoint -> State -> a
+    followCodePoint !offset !acc !cp !state
+      | state == initialState && Char.ord cp < asciiCount = lookupRootAsciiTransition offset acc cp
+      | otherwise = lookupTransition offset acc cp state $ offsets `uAt` state
 
     -- NOTE: This function can't be inlined since it is self-recursive.
     {-# NOINLINE lookupTransition #-}
-    lookupTransition :: CodeUnitIndex -> CodeUnitIndex -> a -> CodePoint -> State -> Offset -> a
-    lookupTransition !offset !remaining !acc !cp !state !i
+    lookupTransition :: CodeUnitIndex -> a -> CodePoint -> State -> Offset -> a
+    lookupTransition !offset !acc !cp !state !i
       -- There is no transition for the given input. Follow the fallback edge,
       -- and try again from that state, etc. If we are in the base state
       -- already, then nothing matched, so move on to the next input.
       | transitionIsWildcard t =
         if state == initialState
-          then consumeInput offset remaining acc state
-          else followCodePoint offset remaining acc cp (transitionState t)
+          then consumeInput offset acc state
+          else followCodePoint offset acc cp (transitionState t)
       -- We found the transition, switch to that new state, possibly matching the rest of cus.
       -- NOTE: This comes after wildcard checking, because the code unit of
       -- the wildcard transition is 0, which is a valid input.
       | transitionCodeUnit t == cp =
-        collectMatches offset remaining acc (transitionState t)
+        collectMatches offset acc (transitionState t)
       -- The transition we inspected is not for the current input, and it is not
       -- a wildcard either; look at the next transition then.
       | otherwise =
-        lookupTransition offset remaining acc cp state $ i + 1
+        lookupTransition offset acc cp state $ i + 1
 
       where
         !t = transitions `uAt` fromIntegral i
@@ -504,21 +505,21 @@ runWithCase !caseSensitivity !seed !f !machine !text =
     -- NOTE: there is no `state` argument here, because this case applies only
     -- to the root state `stateInitial`.
     {-# INLINE lookupRootAsciiTransition #-}
-    lookupRootAsciiTransition !offset !remaining !acc !cp
+    lookupRootAsciiTransition !offset !acc !cp
       -- Given code unit does not match at root ==> Repeat at offset from initial state
-      | transitionIsWildcard t = consumeInput offset remaining acc initialState
+      | transitionIsWildcard t = consumeInput offset acc initialState
       -- Transition matched!
-      | otherwise = collectMatches offset remaining acc $ transitionState t
+      | otherwise = collectMatches offset acc $ transitionState t
       where !t = rootAsciiTransitions `uAt` Char.ord cp
 
     {-# NOINLINE collectMatches #-}
-    collectMatches !offset !remaining !acc !state =
+    collectMatches !offset !acc !state =
       let
         matchedValues = values `at` state
         -- Fold over the matched values. If at any point the user-supplied fold
         -- function returns `Done`, then we early out. Otherwise continue.
         handleMatch !acc' vs = case vs of
-          []     -> consumeInput offset remaining acc' state
+          []     -> consumeInput offset acc' state
           v:more -> case f acc' (Match (offset - initialOffset) v) of
             Step newAcc -> handleMatch newAcc more
             Done finalAcc -> finalAcc
