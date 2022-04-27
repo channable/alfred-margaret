@@ -80,7 +80,9 @@ import qualified Data.Char as Char
 import qualified Data.Text as Text
 import qualified Data.Text.Array as TextArray
 import qualified Data.Text.Internal.Search as TextSearch
+import qualified Data.Text.Internal.Unsafe.Char as UnsafeChar
 import qualified Data.Text.Unsafe as TextUnsafe
+import qualified GHC.Base
 import qualified GHC.Exts as Exts
 
 -- | A UTF-8 code unit is a byte. A Unicode code point can be encoded as up to four code units.
@@ -121,7 +123,7 @@ lengthUtf8 (Text _ _ !len) = CodeUnitIndex len
 {-# INLINE toLowerAscii #-}
 toLowerAscii :: Char -> Char
 toLowerAscii cp
-  | Char.isAsciiUpper cp = Char.chr (Char.ord cp + 0x20)
+  | Char.isAsciiUpper cp = GHC.Base.unsafeChr (Char.ord cp + 0x20)
   | otherwise = cp
 
 -- | Lowercase a 'Text' by applying 'lowerCodePoint' to each 'Char'.
@@ -172,7 +174,7 @@ isCaseInvariant = Text.all (\c -> Char.toLower c == Char.toUpper c)
 {-# INLINE decode2 #-}
 decode2 :: CodeUnit -> CodeUnit -> CodePoint
 decode2 cu0 cu1 =
-  Char.chr $ (fromIntegral cu0 .&. 0x1f) `shiftL` 6 .|. fromIntegral cu1 .&. 0x3f
+  GHC.Base.unsafeChr $ (fromIntegral cu0 .&. 0x1f) `shiftL` 6 .|. fromIntegral cu1 .&. 0x3f
 
 -- | Decode 3 UTF-8 code units into their code point.
 -- The given code units should have the following format:
@@ -183,7 +185,7 @@ decode2 cu0 cu1 =
 {-# INLINE decode3 #-}
 decode3 :: CodeUnit -> CodeUnit -> CodeUnit -> CodePoint
 decode3 cu0 cu1 cu2 =
-  Char.chr $ (fromIntegral cu0 .&. 0xf) `shiftL` 12 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu2 .&. 0x3f)
+  GHC.Base.unsafeChr $ (fromIntegral cu0 .&. 0xf) `shiftL` 12 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu2 .&. 0x3f)
 
 -- | Decode 4 UTF-8 code units into their code point.
 -- The given code units should have the following format:
@@ -194,12 +196,12 @@ decode3 cu0 cu1 cu2 =
 {-# INLINE decode4 #-}
 decode4 :: CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> CodePoint
 decode4 cu0 cu1 cu2 cu3 =
-  Char.chr $ (fromIntegral cu0 .&. 0x7) `shiftL` 18 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 12 .|. (fromIntegral cu2 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu3 .&. 0x3f)
+  GHC.Base.unsafeChr $ (fromIntegral cu0 .&. 0x7) `shiftL` 18 .|. (fromIntegral cu1 .&. 0x3f) `shiftL` 12 .|. (fromIntegral cu2 .&. 0x3f) `shiftL` 6 .|. (fromIntegral cu3 .&. 0x3f)
 
 -- | Decode a list of UTF-8 code units into a list of code points.
 decodeUtf8 :: [CodeUnit] -> [CodePoint]
 decodeUtf8 [] = []
-decodeUtf8 (cu0 : cus) | cu0 < 0xc0 = Char.chr (fromIntegral cu0) : decodeUtf8 cus
+decodeUtf8 (cu0 : cus) | cu0 < 0xc0 = GHC.Base.unsafeChr (fromIntegral cu0) : decodeUtf8 cus
 decodeUtf8 (cu0 : cu1 : cus) | cu0 < 0xe0 = decode2 cu0 cu1 : decodeUtf8 cus
 decodeUtf8 (cu0 : cu1 : cu2 : cus) | cu0 < 0xf0 = decode3 cu0 cu1 cu2 : decodeUtf8 cus
 decodeUtf8 (cu0 : cu1 : cu2 : cu3 : cus) | cu0 < 0xf8 = decode4 cu0 cu1 cu2 cu3 : decodeUtf8 cus
@@ -292,7 +294,7 @@ arrayContents (TextArray.ByteArray ba#) = Exts.Ptr (Exts.byteArrayContents# ba#)
 {-# INLINE unsafeIndexCodePoint' #-}
 unsafeIndexCodePoint' :: TextArray.Array -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
 unsafeIndexCodePoint' !u8data (CodeUnitIndex !idx)
-  | cu0 < 0xc0 = (1, Char.chr $ fromIntegral cu0)
+  | cu0 < 0xc0 = (1, UnsafeChar.unsafeChr8 cu0)
   | cu0 < 0xe0 = (2, decode2 cu0 (cuAt 1))
   | cu0 < 0xf0 = (3, decode3 cu0 (cuAt 1) (cuAt 2))
   | otherwise = (4, decode4 cu0 (cuAt 1) (cuAt 2) (cuAt 3))
