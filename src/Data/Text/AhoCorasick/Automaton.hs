@@ -1,11 +1,10 @@
 -- Alfred-Margaret: Fast Aho-Corasick string searching
--- Copyright 2019 Channable
+-- Copyright 2022 Channable
 --
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -26,6 +25,9 @@
 -- Therefore construction is a two-step process, where first we build the
 -- automaton as int maps, which are convenient for incremental construction.
 -- Afterwards we pack the automaton into unboxed vectors.
+--
+-- This module is a rewrite of the previous version which used an older version of
+-- the 'text' package which in turn used UTF-16 internally.
 module Data.Text.AhoCorasick.Automaton
     ( AcMachine (..)
     , CaseSensitivity (..)
@@ -36,49 +38,55 @@ module Data.Text.AhoCorasick.Automaton
     , debugBuildDot
     , runLower
     , runText
+    , runWithCase
     ) where
 
-import Prelude hiding (length)
-
 import Control.DeepSeq (NFData)
-import Data.Bits (shiftL, shiftR, (.&.), (.|.))
+import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
+import Data.Char (chr)
 import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
-import Data.Text.Internal (Text (..))
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 import GHC.Generics (Generic)
 
+import qualified Data.Char as Char
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Utf16 (CodeUnit, CodeUnitIndex (..), indexTextArray, lowerCodeUnit)
+import Data.Text.Utf8 (CodePoint, CodeUnitIndex (CodeUnitIndex), Text (..))
 import Data.TypedByteArray (Prim, TypedByteArray)
 
+import qualified Data.Text.Utf8 as Utf8
 import qualified Data.TypedByteArray as TBA
 
+-- TYPES
 -- | A numbered state in the Aho-Corasick automaton.
 type State = Int
 
--- | A transition is a pair of (code unit, next state). The code unit is 16 bits,
--- and the state index is 32 bits. We pack these together as a manually unlifted
--- tuple, because an unboxed Vector of tuples is a tuple of vectors, but we want
--- the elements of the tuple to be adjacent in memory. (The Word64 still needs
--- to be unpacked in the places where it is used.) The code unit is stored in
--- the least significant 32 bits, with the special value 2^16 indicating a
--- wildcard; the "failure" transition. Bit 17 through 31 (starting from zero,
+-- | A transition is a pair of (code point, next state). The code point is 21 bits,
+-- and the state index is 32 bits. The code point is stored in
+-- the least significant 32 bits, with the special value 2^21 indicating a
+-- wildcard; the "failure" transition. Bits 22 through 31 (starting from zero,
 -- both bounds inclusive) are always 0.
 --
---  Bit 63 (most significant)                 Bit 0 (least significant)
---  |                                                                 |
---  v                                                                 v
--- |<--       goto state         -->|<-- zeros   -->| |<--   input  -->|
--- |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|000000000000000|W|IIIIIIIIIIIIIIII|
---                                                   |
---                                                   Wildcard bit (bit 16)
 --
+-- >  Bit 63 (most significant)                 Bit 0 (least significant)
+-- >  |                                                                 |
+-- >  v                                                                 v
+-- > |<--       goto state         -->|<-- 0s -->| |<--     input     -->|
+-- > |SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS|0000000000|W|IIIIIIIIIIIIIIIIIIIII|
+-- >                                              |
+-- >                                        Wildcard bit (bit 21)
+--
+-- If you change this representation, make sure to update 'transitionCodeUnit',
+-- 'wildcard', 'transitionState', 'transitionIsWildcard', 'newTransition' and
+-- 'newWildcardTransition' as well. Those functions form the interface used to
+-- construct and read transitions.
 type Transition = Word64
+
+type Offset = Word32
 
 data Match v = Match
   { matchPos   :: {-# UNPACK #-} !CodeUnitIndex
@@ -87,18 +95,18 @@ data Match v = Match
   -- as up to four code units.
   , matchValue :: v
   -- ^ The payload associated with the matched needle.
-  } deriving (Show, Eq)
+  }
 
 -- | An Aho-Corasick automaton.
 data AcMachine v = AcMachine
-  { machineValues :: !(Vector.Vector [v])
+  { machineValues               :: !(Vector.Vector [v])
   -- ^ For every state, the values associated with its needles. If the state is
   -- not a match state, the list is empty.
-  , machineTransitions :: !(TypedByteArray Transition)
+  , machineTransitions          :: !(TypedByteArray Transition)
   -- ^ A packed vector of transitions. For every state, there is a slice of this
   -- vector that starts at the offset given by `machineOffsets`, and ends at the
   -- first wildcard transition.
-  , machineOffsets :: !(TypedByteArray Int)
+  , machineOffsets              :: !(TypedByteArray Offset)
   -- ^ For every state, the index into `machineTransitions` where the transition
   -- list for that state starts.
   , machineRootAsciiTransitions :: !(TypedByteArray Transition)
@@ -109,14 +117,16 @@ data AcMachine v = AcMachine
 
 instance NFData v => NFData (AcMachine v)
 
--- | The wildcard value is 2^16, one more than the maximal 16-bit code unit.
+-- AUTOMATON CONSTRUCTION
+
+-- | The wildcard value is 2^21, one more than the maximal 21-bit code point.
 wildcard :: Integral a => a
-wildcard = 0x10000
+wildcard = 0x200000
 
 -- | Extract the code unit from a transition. The special wildcard transition
 -- will return 0.
-transitionCodeUnit :: Transition -> CodeUnit
-transitionCodeUnit t = fromIntegral (t .&. 0xffff)
+transitionCodeUnit :: Transition -> CodePoint
+transitionCodeUnit t = Char.chr $ fromIntegral (t .&. 0x1fffff)
 
 -- | Extract the goto state from a transition.
 transitionState :: Transition -> State
@@ -127,10 +137,10 @@ transitionState t = fromIntegral (t `shiftR` 32)
 transitionIsWildcard :: Transition -> Bool
 transitionIsWildcard t = (t .&. wildcard) == wildcard
 
-newTransition :: CodeUnit -> State -> Transition
+newTransition :: CodePoint -> State -> Transition
 newTransition input state =
   let
-    input64 = fromIntegral input :: Word64
+    input64 = fromIntegral $ Char.ord input :: Word64
     state64 = fromIntegral state :: Word64
   in
     (state64 `shiftL` 32) .|. input64
@@ -146,20 +156,17 @@ newWildcardTransition state =
 -- the transitions for a specific state, we also produce a vector of start
 -- indices. All transition lists are terminated by a wildcard transition, so
 -- there is no need to record the length.
-packTransitions :: [[Transition]] -> (TypedByteArray Transition, TypedByteArray Int)
+packTransitions :: [[Transition]] -> (TypedByteArray Transition, TypedByteArray Offset)
 packTransitions transitions =
   let
     packed = TBA.fromList $ concat transitions
-    offsets = TBA.fromList $ scanl (+) 0 $ fmap List.length transitions
+    offsets = TBA.fromList $ map fromIntegral $ scanl (+) 0 $ fmap List.length transitions
   in
     (packed, offsets)
 
 -- | Construct an Aho-Corasick automaton for the given needles.
--- Takes a list of code units rather than `Text`, to allow mapping the code
--- units before construction, for example to lowercase individual code points,
--- rather than doing proper case folding (which might change the number of code
--- units).
-build :: [([CodeUnit], v)] -> AcMachine v
+-- The automaton uses Unicode code points to match the input.
+build :: [(Text, v)] -> AcMachine v
 build needlesWithValues =
   let
     -- Construct the Aho-Corasick automaton using IntMaps, which are a suitable
@@ -173,7 +180,7 @@ build needlesWithValues =
     -- Convert the map of transitions, and the map of fallback states, into a
     -- list of transition lists, where every transition list is terminated by
     -- a wildcard transition to the fallback state.
-    prependTransition ts input state = newTransition (fromIntegral input) state : ts
+    prependTransition ts input state = newTransition (Char.chr input) state : ts
     makeTransitions fallback ts = IntMap.foldlWithKey' prependTransition [newWildcardTransition fallback] ts
     transitionsList = zipWith makeTransitions (IntMap.elems fallbackMap) (IntMap.elems transitionMap)
 
@@ -186,7 +193,7 @@ build needlesWithValues =
     AcMachine values transitions offsets rootTransitions
 
 -- | Build the automaton, and format it as Graphviz Dot, for visual debugging.
-debugBuildDot :: [[CodeUnit]] -> String
+debugBuildDot :: [Text] -> String
 debugBuildDot needles =
   let
     (_numStates, transitionMap, initialValueMap) =
@@ -195,15 +202,17 @@ debugBuildDot needles =
     valueMap = buildValueMap transitionMap fallbackMap initialValueMap
 
     dotEdge extra state nextState =
-      "  " ++ (show state) ++ " -> " ++ (show nextState) ++ " [" ++ extra ++ "];"
+      "  " ++ show state ++ " -> " ++ show nextState ++ " [" ++ extra ++ "];"
 
     dotFallbackEdge :: [String] -> State -> State -> [String]
     dotFallbackEdge edges state nextState =
-      (dotEdge "style = dashed" state nextState) : edges
+      dotEdge "style = dashed" state nextState : edges
 
     dotTransitionEdge :: State -> [String] -> Int -> State -> [String]
     dotTransitionEdge state edges input nextState =
-      (dotEdge ("label = \"" ++ show input ++ "\"") state nextState) : edges
+      dotEdge ("label = \"" ++ showInput input ++ "\"") state nextState : edges
+
+    showInput input = [chr input]
 
     prependTransitionEdges edges state =
       IntMap.foldlWithKey' (dotTransitionEdge state) edges (transitionMap IntMap.! state)
@@ -220,7 +229,7 @@ debugBuildDot needles =
     -- bottom. I have dual widescreen monitors and I don't use them in portrait
     -- mode. Reverse the instructions because order affects node lay-out, and by
     -- prepending we built up a reversed list.
-    unlines $ ["digraph {", "  rankdir = \"LR\";"] ++ (reverse dot2) ++ ["}"]
+    unlines $ ["digraph {", "  rankdir = \"LR\";"] ++ reverse dot2 ++ ["}"]
 
 -- Different int maps that are used during constuction of the automaton. The
 -- transition map represents the trie of states, the fallback map contains the
@@ -230,49 +239,48 @@ type FallbackMap = IntMap State
 type ValuesMap v = IntMap [v]
 
 -- | Build the trie of the Aho-Corasick state machine for all input needles.
-buildTransitionMap :: forall v. [([CodeUnit], v)] -> (Int, TransitionMap, ValuesMap v)
+buildTransitionMap :: forall v. [(Text, v)] -> (Int, TransitionMap, ValuesMap v)
 buildTransitionMap =
   let
-    go :: State
-      -> (Int, TransitionMap, ValuesMap v)
-      -> ([CodeUnit], v)
-      -> (Int, TransitionMap, ValuesMap v)
+    -- | Inserts a single needle into the given transition and values map.
+    insertNeedle :: (Int, TransitionMap, ValuesMap v) -> (Text, v) -> (Int, TransitionMap, ValuesMap v)
+    insertNeedle !acc (!needle, !value) = go stateInitial 0 acc
+      where
+        !needleLen = Utf8.lengthUtf8 needle
 
-    -- End of the current needle, insert the associated payload value.
-    -- If a needle occurs multiple times, then at this point we will merge
-    -- their payload values, so the needle is reported twice, possibly with
-    -- different payload values.
-    go !state (!numStates, transitions, values) ([], v) =
-      (numStates, transitions, IntMap.insertWith (++) state [v] values)
-
-    -- Follow the edge for the given input from the current state, creating it
-    -- if it does not exist.
-    go !state (!numStates, transitions, values) (!input : needleTail, vs) =
-      let
-        transitionsFromState = transitions IntMap.! state
-      in
-        case IntMap.lookup (fromIntegral input) transitionsFromState of
-          Just nextState ->
-            go nextState (numStates, transitions, values) (needleTail, vs)
-          Nothing ->
-            let
+        go !state !index (!numStates, !transitions, !values)
+          -- End of the current needle, insert the associated payload value.
+          -- If a needle occurs multiple times, then at this point we will merge
+          -- their payload values, so the needle is reported twice, possibly with
+          -- different payload values.
+          | index >= needleLen = (numStates, transitions, IntMap.insertWith (++) state [value] values)
+        go !state !index (!numStates, !transitions, !values) =
+          let
+            !transitionsFromState = transitions IntMap.! state
+            (!codeUnits, !input) = Utf8.unsafeIndexCodePoint needle index
+          in
+            case IntMap.lookup (Char.ord input) transitionsFromState of
+              -- Transition already exists, follow it and continue from there.
+              Just !nextState ->
+                go nextState (index + codeUnits) (numStates, transitions, values)
+              -- Transition for input does not exist at state:
               -- Allocate a new state, and insert a transition to it.
               -- Also insert an empty transition map for it.
-              nextState = numStates
-              transitionsFromState' = IntMap.insert (fromIntegral input) nextState transitionsFromState
-              transitions'
-                = IntMap.insert state transitionsFromState'
-                $ IntMap.insert nextState IntMap.empty
-                $ transitions
-            in
-              go nextState (numStates + 1, transitions', values) (needleTail, vs)
+              Nothing ->
+                let
+                  !nextState = numStates
+                  !transitionsFromState' = IntMap.insert (Char.ord input) nextState transitionsFromState
+                  !transitions'
+                    = IntMap.insert state transitionsFromState'
+                    $ IntMap.insert nextState IntMap.empty transitions
+                in
+                  go nextState (index + codeUnits) (numStates + 1, transitions', values)
 
     -- Initially, the root state (state 0) exists, and it has no transitions
     -- to anywhere.
     stateInitial = 0
     initialTransitions = IntMap.singleton stateInitial IntMap.empty
     initialValues = IntMap.empty
-    insertNeedle = go stateInitial
   in
     foldl' insertNeedle (1, initialTransitions, initialValues)
 
@@ -280,14 +288,15 @@ buildTransitionMap =
 asciiCount :: Integral a => a
 asciiCount = 128
 
--- | Build a lookup table for the first 128 code units, that can be used for
+-- | Build a lookup table for the first 128 code points, that can be used for
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
+{-# NOINLINE buildAsciiTransitionLookupTable  #-}
 buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
 buildAsciiTransitionLookupTable transitions = TBA.generate asciiCount $ \i ->
   case IntMap.lookup i transitions of
-    Just state -> newTransition (fromIntegral i) state
-    Nothing -> newWildcardTransition 0
+    Just state -> newTransition (Char.chr i) state
+    Nothing    -> newWildcardTransition 0
 
 -- | Traverse the state trie in breadth-first order.
 foldBreadthFirst :: (a -> State -> a) -> a -> TransitionMap -> a
@@ -367,6 +376,7 @@ buildValueMap transitions fallbacks valuesInitial =
 -- in one place. We ran this code with `Vector.!` (bounds-checked indexing) in
 -- production for two months without failing the bounds check, so we have turned
 -- the check off for performance now.
+{-# INLINE at #-}
 at :: forall a. Vector.Vector a -> Int -> a
 at = Vector.unsafeIndex
 
@@ -374,123 +384,147 @@ at = Vector.unsafeIndex
 uAt :: Prim a => TypedByteArray a -> Int -> a
 uAt = TBA.unsafeIndex
 
+-- RUNNING THE MACHINE
+
 -- | Result of handling a match: stepping the automaton can exit early by
 -- returning a `Done`, or it can continue with a new accumulator with `Step`.
-data Next a
-  = Done !a
-  | Step !a
+data Next a = Done !a | Step !a
 
 -- | Run the automaton, possibly lowercasing the input text on the fly if case
--- insensitivity is desired. See also `lowerCodeUnit` and `runLower`.
+-- insensitivity is desired. See also `runLower`.
+--
+-- The code of this function itself is organized as a state machine as well.
+-- Each state in the diagram below corresponds to a function defined in
+-- `runWithCase`. These functions are written in a way such that GHC identifies them
+-- as [join points](https://www.microsoft.com/en-us/research/publication/compiling-without-continuations/).
+-- This means that they can be compiled to jumps instead of function calls, which helps performance a lot.
+--
+-- @
+--   ┌─────────────────────────────┐
+--   │                             │
+-- ┌─▼──────────┐   ┌──────────────┴─┐   ┌──────────────┐
+-- │consumeInput├───►lookupTransition├───►collectMatches│
+-- └─▲──────────┘   └─▲────────────┬─┘   └────────────┬─┘
+--   │                │            │                  │
+--   │                └────────────┘                  │
+--   │                                                │
+--   └────────────────────────────────────────────────┘
+-- @
+--
+-- * @consumeInput@ decodes a code point of up to four code units and possibly lowercases it.
+--   It passes this code point to @followCodePoint@, which in turn calls @lookupTransition@.
+-- * @lookupTransition@ checks whether the given code point matches any transitions at the given state.
+--   If so, it follows the transition and calls @collectMatches@. Otherwise, it follows the fallback transition
+--   and calls @followCodePoint@ or @consumeInput@.
+-- * @collectMatches@ checks whether the current state is accepting and updates the accumulator accordingly.
+--   Afterwards it loops back to @consumeInput@.
+--
+-- NOTE: @followCodePoint@ is actually inlined into @consumeInput@ by GHC.
+-- It is included in the diagram for illustrative reasons only.
+--
+-- All of these functions have the arguments @offset@, @state@ and @acc@ which encode the current input
+-- position and the accumulator, which contains the matches. If you change any of the functions above,
+-- make sure to check the Core dumps afterwards that @offset@ and @state@ were turned
+-- into unboxed @Int#@ by GHC. If any of them aren't, the program will constantly allocate and deallocate heap space for them.
+-- You can nudge GHC in the right direction by using bang patterns on these arguments.
+--
 -- WARNING: Run benchmarks when modifying this function; its performance is
 -- fragile. It took many days to discover the current formulation which compiles
 -- to fast code; removing the wrong bang pattern could cause a 10% performance
 -- regression.
 {-# INLINE runWithCase #-}
-runWithCase
-  :: forall a v
-  .  CaseSensitivity
-  -> a
-  -> (a -> Match v -> Next a)
-  -> AcMachine v
-  -> Text
-  -> a
-runWithCase caseSensitivity seed f machine text =
-  let
-    Text u16data !initialOffset !initialRemaining = text
-    !values = machineValues machine
-    !transitions = machineTransitions machine
-    !offsets = machineOffsets machine
-    !rootAsciiTransitions = machineRootAsciiTransitions machine
-    !stateInitial = 0
+runWithCase :: forall a v. CaseSensitivity -> a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
+runWithCase !caseSensitivity !seed !f !machine !text =
+  consumeInput initialOffset seed initialState
+  where
+    initialState = 0
+
+    Text !u8data !off !len = text
+    AcMachine !values !transitions !offsets !rootAsciiTransitions = machine
+
+    !initialOffset = CodeUnitIndex off
+    !limit = CodeUnitIndex $ off + len
 
     -- NOTE: All of the arguments are strict here, because we want to compile
     -- them down to unpacked variables on the stack, or even registers.
-    -- The INLINE / NOINLINE annotations here were added to fix a regression we
-    -- observed when going from GHC 8.2 to GHC 8.6, and this particular
-    -- combination of INLINE and NOINLINE is the fastest one. Removing increases
-    -- the benchmark running time by about 9%.
 
+    -- When we follow an edge, we look in the transition table and do a
+    -- linear scan over all transitions until we find the right one, or
+    -- until we hit the wildcard transition at the end. For 0 or 1 or 2
+    -- transitions that is fine, but the initial state often has more
+    -- transitions, so we have a dedicated lookup table for it, that takes
+    -- up a bit more space, but provides O(1) lookup of the next state. We
+    -- only do this for the first 128 code units (all of ascii).
+
+    -- | Consume a code unit sequence that constitutes a full code point.
+    -- If the code unit at @offset@ is ASCII, we can lower it using 'Utf8.toLowerAscii'.
     {-# NOINLINE consumeInput #-}
-    consumeInput :: Int -> Int -> a -> State -> a
-    consumeInput !offset !remaining !acc !state =
-      let
-        inputCodeUnit = fromIntegral $ indexTextArray u16data offset
-        -- NOTE: Although doing this match here entangles the automaton a bit
-        -- with case sensitivity, doing so is faster than passing in a function
-        -- that transforms each code unit.
-        casedCodeUnit = case caseSensitivity of
-          IgnoreCase -> lowerCodeUnit inputCodeUnit
-          CaseSensitive -> inputCodeUnit
-      in
-        case remaining of
-          0 -> acc
-          _ -> followEdge (offset + 1) (remaining - 1) acc state casedCodeUnit
+    consumeInput :: CodeUnitIndex -> a -> State -> a
+    consumeInput !offset !acc !_state
+      | offset >= limit = acc
+    consumeInput !offset !acc !state =
+      followCodePoint (offset + codeUnits) acc possiblyLoweredCp state
 
-    {-# INLINE followEdge #-}
-    followEdge :: Int -> Int -> a -> State -> CodeUnit -> a
-    followEdge !offset !remaining !acc !state !input =
-      let
-        !tssOffset = offsets `uAt` state
-      in
-        -- When we follow an edge, we look in the transition table and do a
-        -- linear scan over all transitions until we find the right one, or
-        -- until we hit the wildcard transition at the end. For 0 or 1 or 2
-        -- transitions that is fine, but the initial state often has more
-        -- transitions, so we have a dedicated lookup table for it, that takes
-        -- up a bit more space, but provides O(1) lookup of the next state. We
-        -- only do this for the first 128 code units (all of ascii).
-        if state == stateInitial && input < asciiCount
-          then lookupRootAsciiTransition offset remaining acc input
-          else lookupTransition offset remaining acc state input tssOffset
+      where
+        (!codeUnits, !cp) = Utf8.unsafeIndexCodePoint' u8data offset
+
+        !possiblyLoweredCp = case caseSensitivity of
+          CaseSensitive -> cp
+          IgnoreCase -> Utf8.lowerCodePoint cp
+
+    {-# INLINE followCodePoint #-}
+    followCodePoint :: CodeUnitIndex -> a -> CodePoint -> State -> a
+    followCodePoint !offset !acc !cp !state
+      | state == initialState && Char.ord cp < asciiCount = lookupRootAsciiTransition offset acc cp
+      | otherwise = lookupTransition offset acc cp state $ offsets `uAt` state
+
+    -- NOTE: This function can't be inlined since it is self-recursive.
+    {-# NOINLINE lookupTransition #-}
+    lookupTransition :: CodeUnitIndex -> a -> CodePoint -> State -> Offset -> a
+    lookupTransition !offset !acc !cp !state !i
+      -- There is no transition for the given input. Follow the fallback edge,
+      -- and try again from that state, etc. If we are in the base state
+      -- already, then nothing matched, so move on to the next input.
+      | transitionIsWildcard t =
+        if state == initialState
+          then consumeInput offset acc state
+          else followCodePoint offset acc cp (transitionState t)
+      -- We found the transition, switch to that new state, possibly matching the rest of cus.
+      -- NOTE: This comes after wildcard checking, because the code unit of
+      -- the wildcard transition is 0, which is a valid input.
+      | transitionCodeUnit t == cp =
+        collectMatches offset acc (transitionState t)
+      -- The transition we inspected is not for the current input, and it is not
+      -- a wildcard either; look at the next transition then.
+      | otherwise =
+        lookupTransition offset acc cp state $ i + 1
+
+      where
+        !t = transitions `uAt` fromIntegral i
+
+    -- NOTE: there is no `state` argument here, because this case applies only
+    -- to the root state `stateInitial`.
+    {-# INLINE lookupRootAsciiTransition #-}
+    lookupRootAsciiTransition !offset !acc !cp
+      -- Given code unit does not match at root ==> Repeat at offset from initial state
+      | transitionIsWildcard t = consumeInput offset acc initialState
+      -- Transition matched!
+      | otherwise = collectMatches offset acc $ transitionState t
+      where !t = rootAsciiTransitions `uAt` Char.ord cp
 
     {-# NOINLINE collectMatches #-}
-    collectMatches :: Int -> Int -> a -> State -> a
-    collectMatches !offset !remaining !acc !state =
+    collectMatches !offset !acc !state =
       let
         matchedValues = values `at` state
         -- Fold over the matched values. If at any point the user-supplied fold
         -- function returns `Done`, then we early out. Otherwise continue.
         handleMatch !acc' vs = case vs of
-          []     -> consumeInput offset remaining acc' state
-          v:more -> case f acc' (Match (CodeUnitIndex $ offset - initialOffset) v) of
+          []     -> consumeInput offset acc' state
+          v:more -> case f acc' (Match (offset - initialOffset) v) of
             Step newAcc -> handleMatch newAcc more
             Done finalAcc -> finalAcc
       in
         handleMatch acc matchedValues
-
-    -- NOTE: there is no `state` argument here, because this case applies only
-    -- to the root state `stateInitial`.
-    {-# INLINE lookupRootAsciiTransition #-}
-    lookupRootAsciiTransition :: Int -> Int -> a -> CodeUnit -> a
-    lookupRootAsciiTransition !offset !remaining !acc !input =
-      case rootAsciiTransitions `uAt` fromIntegral input of
-        t | transitionIsWildcard t -> consumeInput offset remaining acc stateInitial
-          | otherwise -> collectMatches offset remaining acc (transitionState t)
-
-    {-# INLINE lookupTransition #-}
-    lookupTransition :: Int -> Int -> a -> State -> CodeUnit -> Int -> a
-    lookupTransition !offset !remaining !acc !state !input !i =
-      case transitions `uAt` i of
-        -- There is no transition for the given input. Follow the fallback edge,
-        -- and try again from that state, etc. If we are in the base state
-        -- already, then nothing matched, so move on to the next input.
-        t | transitionIsWildcard t ->
-              if state == stateInitial
-                then consumeInput offset remaining acc state
-                else followEdge offset remaining acc (transitionState t) input
-
-        -- We found the transition, switch to that new state, collecting matches.
-        -- NOTE: This comes after wildcard checking, because the code unit of
-        -- the wildcard transition is 0, which is a valid input.
-        t | transitionCodeUnit t == input ->
-              collectMatches offset remaining acc (transitionState t)
-
-        -- The transition we inspected is not for the current input, and it is not
-        -- a wildcard either; look at the next transition then.
-        _ -> lookupTransition offset remaining acc state input (i + 1)
-  in
-    consumeInput initialOffset initialRemaining seed stateInitial
 
 -- NOTE: To get full advantage of inlining this function, you probably want to
 -- compile the compiling module with -fllvm and the same optimization flags as
@@ -499,12 +533,10 @@ runWithCase caseSensitivity seed f machine text =
 runText :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runText = runWithCase CaseSensitive
 
--- Finds all matches in the lowercased text. This function lowercases the text
--- on the fly to avoid allocating a second lowercased text array. Lowercasing is
--- applied to individual code units, so the indexes into the lowercased text can
--- be used to index into the original text. It is still the responsibility of
--- the caller to lowercase the needles. Needles that contain uppercase code
--- points will not match.
+-- Finds all matches in the lowercased text. This function lowercases the input text
+-- on the fly to avoid allocating a second lowercased text array.  It is still the
+-- responsibility of  the caller to lowercase the needles. Needles that contain
+-- uppercase code  points will not match.
 --
 -- NOTE: To get full advantage of inlining this function, you probably want to
 -- compile the compiling module with -fllvm and the same optimization flags as

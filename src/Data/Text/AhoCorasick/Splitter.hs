@@ -9,21 +9,21 @@
 
 -- | Splitting strings using Aho–Corasick.
 module Data.Text.AhoCorasick.Splitter
-  ( Splitter
-  , build
-  , automaton
-  , separator
-  , split
-  , splitIgnoreCase
-  , splitReverse
-  , splitReverseIgnoreCase
-  ) where
+    ( Splitter
+    , automaton
+    , build
+    , separator
+    , split
+    , splitIgnoreCase
+    , splitReverse
+    , splitReverseIgnoreCase
+    ) where
 
 import Control.DeepSeq (NFData (..))
 import Data.Function (on)
 import Data.Hashable (Hashable (..))
 import Data.List.NonEmpty (NonEmpty ((:|)))
-import Data.Text (Text)
+import Data.Text.Utf8 (Text)
 
 #if defined(HAS_AESON)
 import qualified Data.Aeson as AE
@@ -33,8 +33,8 @@ import qualified Data.List.NonEmpty as NonEmpty
 
 import Data.Text.AhoCorasick.Automaton (AcMachine)
 
+import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.AhoCorasick.Automaton as Aho
-import qualified Data.Text.Utf16 as Utf16
 
 --------------------------------------------------------------------------------
 -- Splitter
@@ -58,7 +58,7 @@ instance AE.FromJSON Splitter where
 {-# INLINE build #-}
 build :: Text -> Splitter
 build sep =
-  let !auto = Aho.build [(Utf16.unpackUtf16 sep, ())] in
+  let !auto = Aho.build [(sep, ())] in
   Splitter auto sep
 
 -- | Get the automaton that would be used for finding separators.
@@ -134,13 +134,13 @@ finalizeAccum (Accum _ hay res prevEnd) =
   -- Once we have processed all the matches, there is still the substring after
   -- the final match. This substring is always included in the result, even
   -- when there were no matches. Hence we can return a non-empty list.
-  let !str = Utf16.unsafeSliceUtf16 prevEnd (Utf16.lengthUtf16 hay - prevEnd) hay in
+  let !str = Utf8.unsafeSliceUtf8 prevEnd (Utf8.lengthUtf8 hay - prevEnd) hay in
   str :| res
 
 -- | The initial accumulator begins at the begin of the haystack.
 {-# INLINE zeroAccum #-}
 zeroAccum :: Text -> Text -> Accum
-zeroAccum sep hay = Accum (Utf16.lengthUtf16 sep) hay [] 0
+zeroAccum sep hay = Accum (Utf8.lengthUtf8 sep) hay [] 0
 
 -- | Step the accumulator using the next match. Overlapping matches will be
 -- ignored. Overlapping matches may occur when the separator has a non-empty
@@ -157,7 +157,7 @@ stepAccum acc@(Accum sepLen hay res prevEnd) (Aho.Match sepEnd _)
   -- The match is behind the current offset, so we slice the haystack until the
   -- begin of the match and include that as a result.
   | otherwise =
-      let !str = Utf16.unsafeSliceUtf16 prevEnd (sepEnd - sepLen - prevEnd) hay in
+      let !str = Utf8.unsafeSliceUtf8 prevEnd (sepEnd - sepLen - prevEnd) hay in
       Aho.Step acc { accumResult = str : res, accumPrevEnd = sepEnd }
 
 --------------------------------------------------------------------------------

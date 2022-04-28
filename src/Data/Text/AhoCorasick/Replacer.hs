@@ -12,36 +12,34 @@
 
 -- | Implements sequential string replacements based on the Aho-Corasick algorithm.
 module Data.Text.AhoCorasick.Replacer
-  ( -- * State machine
-    Replacer (..)
-  , build
-  , compose
-  , run
-  , runWithLimit
-  , Needle
-  , Replacement
-  , Payload (..)
-  ) where
+    ( -- * State machine
+      Needle
+    , Payload (..)
+    , Replacement
+    , Replacer (..)
+    , build
+    , compose
+    , run
+    , runWithLimit
+    ) where
 
 import Control.DeepSeq (NFData)
 import Data.Hashable (Hashable)
 import Data.List (sort)
 import Data.Maybe (fromJust)
-import Data.Text (Text)
 import GHC.Generics (Generic)
 
 #if defined(HAS_AESON)
 import qualified Data.Aeson as AE
 #endif
 
-import qualified Data.Text as Text
-
-import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..), CodeUnitIndex)
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
+import Data.Text.Utf8 (CodeUnitIndex, Text)
 import Data.Text.AhoCorasick.Searcher (Searcher)
 
+import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Searcher as Searcher
-import qualified Data.Text.Utf16 as Utf16
 
 -- | Descriptive type alias for strings to search for.
 type Needle = Text
@@ -80,8 +78,8 @@ data Replacer = Replacer
 -- | Build an Aho-Corasick automaton that can be used for performing fast
 -- sequential replaces.
 --
--- Case-insensitive matching performs per-letter language-agnostic case folding.
--- Therefore, it will work in most cases, but not in languages where case folding
+-- Case-insensitive matching performs per-letter language-agnostic lower-casing.
+-- Therefore, it will work in most cases, but not in languages where lower-casing
 -- depends on the context of the character in question.
 --
 -- We need to revisit this algorithm when we want to implement full Unicode
@@ -94,12 +92,12 @@ build caseSensitivity replaces = Replacer caseSensitivity searcher
       let
         needle' = case caseSensitivity of
           CaseSensitive -> needle
-          IgnoreCase -> Utf16.lowerUtf16 needle
+          IgnoreCase -> Utf8.lowerUtf8 needle
       in
         -- Note that we negate i: earlier needles have a higher priority. We
         -- could avoid it and define larger integers to be lower priority, but
         -- that made the terminology in this module very confusing.
-        (needle', Payload (-i) (Utf16.lengthUtf16 needle') replacement)
+        (needle', Payload (-i) (Utf8.lengthUtf8 needle') replacement)
 
 -- | Return the composition `replacer2` after `replacer1`, if they have the same
 -- case sensitivity. If the case sensitivity differs, Nothing is returned.
@@ -125,7 +123,7 @@ data Match = Match !CodeUnitIndex !CodeUnitIndex !Text deriving (Eq, Ord, Show)
 -- | Apply replacements of all matches. Assumes that the matches are ordered by
 -- match position, and that no matches overlap.
 replace :: [Match] -> Text -> Text
-replace matches haystack = Text.concat $ go 0 matches haystack
+replace matches haystack = Utf8.concat $ go 0 matches haystack
   where
     -- At every match, cut the string into three pieces, removing the match.
     -- Because a Text is a buffer pointer and (offset, length), cutting does not
@@ -139,23 +137,23 @@ replace matches haystack = Text.concat $ go 0 matches haystack
     go !_offset [] remainder = [remainder]
     go !offset ((Match pos len replacement) : ms) remainder =
       let
-        (prefix, suffix) = Utf16.unsafeCutUtf16 (pos - offset) len remainder
+        (prefix, suffix) = Utf8.unsafeCutUtf8 (pos - offset) len remainder
       in
         prefix : replacement : go (pos + len) ms suffix
 
 -- | Compute the length of the string resulting from applying the replacements.
 replacementLength :: [Match] -> Text -> CodeUnitIndex
-replacementLength matches initial  = go matches (Utf16.lengthUtf16 initial)
+replacementLength matches initial  = go matches (Utf8.lengthUtf8 initial)
   where
     go [] !acc = acc
-    go (Match _ matchLen repl : rest) !acc = go rest (acc - matchLen + Utf16.lengthUtf16 repl)
+    go (Match _ matchLen repl : rest) !acc = go rest (acc - matchLen + Utf8.lengthUtf8 repl)
 
 -- | Given a list of matches sorted on start position, remove matches that start
 -- within an earlier match.
 removeOverlap :: [Match] -> [Match]
 removeOverlap matches = case matches of
   [] -> []
-  m:[] -> m:[]
+  [m] -> [m]
   (m0@(Match pos0 len0 _) : m1@(Match pos1 _ _) : ms) ->
     if pos1 >= pos0 + len0
       then m0 : removeOverlap (m1:ms)
@@ -173,7 +171,7 @@ removeOverlap matches = case matches of
 prependMatch :: Priority -> (Priority, [Match]) -> Aho.Match Payload -> Aho.Next (Priority, [Match])
 prependMatch !threshold (!pBest, !matches) (Aho.Match pos (Payload pMatch len replacement))
   | pMatch < threshold && pMatch >  pBest = Aho.Step (pMatch, [Match (pos - len) len replacement])
-  | pMatch < threshold && pMatch == pBest = Aho.Step (pMatch, (Match (pos - len) len replacement) : matches)
+  | pMatch < threshold && pMatch == pBest = Aho.Step (pMatch, Match (pos - len) len replacement : matches)
   | otherwise = Aho.Step (pBest, matches)
 
 run :: Replacer -> Text -> Text

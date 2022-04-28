@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Data.Text.Utf8.Utf8Spec where
+module Data.Text.Utf8Spec where
 
 import Control.Monad (forM_)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
@@ -11,7 +11,6 @@ import Test.QuickCheck (Gen, choose, forAllShrink, shrink)
 import qualified Data.Char as Char
 
 import Data.Text.Orphans ()
-import Data.Text.Utf8 (stringToByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
 
@@ -57,7 +56,8 @@ spec = do
         let
             -- | Example shown in section "Slicing Functions" in 'Data.Text.Utf8".
             slicingExample :: Utf8.Text
-            slicingExample = Utf8.Text (stringToByteArray "ABCDEFGHIJKLMN") 1 11
+            slicingExample = Utf8.Text u8data 1 11
+                where Utf8.Text u8data _ _ = Utf8.pack "ABCDEFGHIJKLMN"
 
         it "satisfies the example in Data.Text.Utf8" $ do
             let begin = Utf8.CodeUnitIndex 2

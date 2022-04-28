@@ -1,8 +1,8 @@
 name: ac-bench-ffi
 maintainer: Channable
 category: Other
-synopsis: Benchmark code for alfred-margaret
-description: Benchmark code for alfred-margaret
+synopsis: Benchmark code for alfred-margaret with Rust FFI
+description: Benchmark code for alfred-margaret with Rust FFI
 version: '0'
 github: channable/alfred-margaret
 
@@ -23,14 +23,16 @@ ghc-options: >-
   +RTS -A64m -RTS
 
 executables:
-  ac-bench:
+  ac-bench-ffi:
     dependencies:
     - alfred-margaret
     - base
+    - bytestring
     - clock
     - ghc-compact
     - deepseq
     - primitive
+    - text
     ghc-options:
     - -rtsopts
     - -threaded

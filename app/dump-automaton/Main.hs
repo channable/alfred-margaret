@@ -2,7 +2,7 @@ module Main where
 
 import Control.Monad (forM)
 import qualified Data.Text.Utf8 as Utf8
-import Data.Text.Utf8.AhoCorasick.Automaton (debugBuildDot)
+import Data.Text.AhoCorasick.Automaton (debugBuildDot)
 import System.Environment (getArgs)
 import System.IO (hPrint, hPutStr, stderr)
 

@@ -1,5 +1,5 @@
 -- Alfred-Margaret: Fast Aho-Corasick string searching
--- Copyright 2019 Channable
+-- Copyright 2022 Channable
 --
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
@@ -27,19 +27,19 @@ module Data.Text.AhoCorasick.Searcher
 
 import Control.DeepSeq (NFData)
 import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
-import Data.Text (Text)
 import GHC.Generics (Generic)
-
-import qualified Data.IntSet as IS
 
 #if defined(HAS_AESON)
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as AE
 #endif
-import Data.Text.AhoCorasick.Automaton (CaseSensitivity (..))
+
+import qualified Data.IntSet as IS
+
+import Data.Text.CaseSensitivity (CaseSensitivity (..))
+import Data.Text.Utf8 (Text)
 
 import qualified Data.Text.AhoCorasick.Automaton as Aho
-import qualified Data.Text.Utf16 as Utf16
 
 -- | A set of needles with associated values, and an Aho-Corasick automaton to
 -- efficiently find those needles.
@@ -113,10 +113,7 @@ build case_ = buildWithValues case_ . fmap (, ())
 buildWithValues :: Hashable v => CaseSensitivity -> [(Text, v)] -> Searcher v
 {-# INLINABLE buildWithValues #-}
 buildWithValues case_ ns =
-  let
-    unpack (text, value) = (Utf16.unpackUtf16 text, value)
-  in
-    Searcher case_ (hashed ns) (length ns) $ Aho.build $ fmap unpack ns
+  Searcher case_ (hashed ns) (length ns) $ Aho.build ns
 
 needles :: Searcher v -> [(Text, v)]
 needles = unhashed . searcherNeedles
@@ -154,8 +151,8 @@ containsAny !searcher !text =
     -- On the first match, return True immediately.
     f _acc _match = Aho.Done True
   in case caseSensitivity searcher of
-    CaseSensitive -> Aho.runText False f (automaton searcher) text
-    IgnoreCase   -> Aho.runLower False f (automaton searcher) text
+    CaseSensitive  -> Aho.runText False f (automaton searcher) text
+    IgnoreCase      -> Aho.runLower False f (automaton searcher) text
 
 -- | Build a 'Searcher' that returns the needle's index in the needle list when it matches.
 buildNeedleIdSearcher :: CaseSensitivity -> [Text] -> Searcher Int
@@ -178,4 +175,4 @@ containsAll !searcher !haystack =
 
   in IS.null $ case caseSensitivity searcher of
     CaseSensitive -> Aho.runText initial f ac haystack
-    IgnoreCase   -> Aho.runLower initial f ac haystack
+    IgnoreCase -> Aho.runLower initial f ac haystack

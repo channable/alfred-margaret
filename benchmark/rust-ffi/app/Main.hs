@@ -13,7 +13,8 @@ import GHC.Compact (compact, getCompact)
 import System.IO (hPrint, stderr, stdout)
 import Text.Printf (hPrintf)
 
-import qualified Data.Primitive.ByteArray as BA
+import qualified Data.ByteString as ByteString
+import qualified Data.Text.Encoding as Encoding
 import qualified System.Clock as Clock
 import qualified System.Environment as Env
 
@@ -43,12 +44,12 @@ instance Storable U8Slice where
 -- The 'ByteArray' values inside must be pinned.
 fromText :: Text -> U8Slice
 fromText (Text u8data off len)
-  | BA.isByteArrayPinned u8data = U8Slice (BA.byteArrayContents u8data) (fromIntegral off) (fromIntegral len)
-  | otherwise                   = error "ByteArray is not pinned"
+  | Utf8.isArrayPinned u8data = U8Slice (Utf8.arrayContents u8data) (fromIntegral off) (fromIntegral len)
+  | otherwise                 = error "ByteArray is not pinned"
 
 readNeedleHaystackFile :: FilePath -> IO ([Text], Text)
 readNeedleHaystackFile path = do
-  (Text u8data off len) <- Utf8.readFile path
+  (Text u8data off len) <- Encoding.decodeUtf8 <$> ByteString.readFile path
   pure $ go u8data off len []
   where
     go u8data off 0 needles = (reverse needles, Text u8data off 0)

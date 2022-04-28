@@ -8,40 +8,33 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Data.Text.BoyerMoore.Replacer
-  ( -- Replacer
-  replaceSingleLimited
-  )
-  where
+    ( -- Replacer
+      replaceSingleLimited
+    ) where
 
-import Data.Text (Text)
+import Data.Text.Utf8 (Text)
 import Data.Text.BoyerMoore.Automaton (Automaton, CodeUnitIndex)
 
-import qualified Data.Text as Text
-
-import Data.Text.BoyerMoore.Automaton (CaseSensitivity (..))
-
+import qualified Data.Text.Utf8 as Text
+import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.BoyerMoore.Automaton as BoyerMoore
-import qualified Data.Text.Utf16 as Utf16
 
 -- | Replace all occurrences matched by the Boyer-Moore automaton
 -- with the given replacement text in some haystack.
+-- Performs case-sensitive replacement.
 replaceSingleLimited
-  :: CaseSensitivity
-  -- ^ In case of 'IgnoreCase', the automaton must have been created with a lower-case needle
-  -> Automaton -- ^ Matches the needles
+  :: Automaton -- ^ Matches the needles
   -> Text -- ^ Replacement string
   -> Text -- ^ Haystack
   -> CodeUnitIndex -- ^ Maximum number of code units in the returned text
   -> Maybe Text
-replaceSingleLimited caseSensitivity needle replacement haystack maxLength
+replaceSingleLimited needle replacement haystack maxLength
   | needleLength == 0 = Just $ if haystackLength == 0 then replacement else haystack
-  | otherwise = finish $ case caseSensitivity of
-      CaseSensitive -> BoyerMoore.runText initial foundMatch needle haystack
-      IgnoreCase -> BoyerMoore.runLower initial foundMatch needle haystack
+  | otherwise = finish $ BoyerMoore.runText initial foundMatch needle haystack
   where
     needleLength = BoyerMoore.patternLength needle
-    haystackLength = Utf16.lengthUtf16 haystack
-    replacementLength = Utf16.lengthUtf16 replacement
+    haystackLength = Utf8.lengthUtf8 haystack
+    replacementLength = Utf8.lengthUtf8 replacement
 
     initial = ReplaceState
       { rsChunks = []
@@ -56,7 +49,7 @@ replaceSingleLimited caseSensitivity needle replacement haystack maxLength
         -- Slice the part of the haystack between the end of the previous match
         -- and the start of the current match
         haystackPartLength = matchStart - rsPreviousMatchEnd rs
-        haystackPart = Utf16.unsafeSliceUtf16 (rsPreviousMatchEnd rs) haystackPartLength haystack
+        haystackPart = Utf8.unsafeSliceUtf8 (rsPreviousMatchEnd rs) haystackPartLength haystack
 
         -- Add the preceding part of the haystack and the replacement in reverse
         -- order to the chunk list (all chunks will be reversed at once in the final step).
@@ -79,7 +72,7 @@ replaceSingleLimited caseSensitivity needle replacement haystack maxLength
         -- to the end of the haystack.
         haystackPartLength = haystackLength - rsPreviousMatchEnd rs
         finalChunks
-            = Utf16.unsafeSliceUtf16 (rsPreviousMatchEnd rs) haystackPartLength haystack
+            = Utf8.unsafeSliceUtf8 (rsPreviousMatchEnd rs) haystackPartLength haystack
             : rsChunks rs
         finalLength = rsLength rs + haystackPartLength
       in
