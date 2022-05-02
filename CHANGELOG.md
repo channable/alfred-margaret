@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.0.0 - "So Long Surrogates" (2022-05-02)
+
+Switched to text-2.0 which uses UTF-8 encoding internally.
+
+- Removed `Data.Text.Utf8.*` modules
+- Replaced `Data.Text.AhoCorasick.*` and `Data.Text.BoyerMoore.*` (previously using UTF-16) with the UTF-8 implementation
+
 ## v1.1.2.0 - "ByteArray Boogaloo" (2022-04-21)
 
 Added UTF-8 implementations on a mock `Text` type (in `Data.Text.Utf8`).
