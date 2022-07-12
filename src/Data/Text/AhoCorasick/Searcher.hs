@@ -20,12 +20,14 @@ module Data.Text.AhoCorasick.Searcher
     , caseSensitivity
     , containsAll
     , containsAny
+    , mapSearcher
     , needles
     , numNeedles
     , setSearcherCaseSensitivity
     ) where
 
 import Control.DeepSeq (NFData)
+import Data.Bifunctor (second)
 import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
 import GHC.Generics (Generic)
 
@@ -114,6 +116,13 @@ buildWithValues :: Hashable v => CaseSensitivity -> [(Text, v)] -> Searcher v
 {-# INLINABLE buildWithValues #-}
 buildWithValues case_ ns =
   Searcher case_ (hashed ns) (length ns) $ Aho.build ns
+
+-- | Modify the values associated with the needles.
+mapSearcher :: Hashable b => (a -> b) -> Searcher a -> Searcher b
+mapSearcher f searcher = searcher
+  { searcherNeedles = hashed $ fmap (second f) $ needles searcher
+  , searcherAutomaton = fmap f (searcherAutomaton searcher)
+  }
 
 needles :: Searcher v -> [(Text, v)]
 needles = unhashed . searcherNeedles

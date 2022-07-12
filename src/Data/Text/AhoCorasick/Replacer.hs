@@ -19,6 +19,7 @@ module Data.Text.AhoCorasick.Replacer
     , Replacer (..)
     , build
     , compose
+    , mapReplacement
     , run
     , runWithLimit
     ) where
@@ -33,13 +34,13 @@ import GHC.Generics (Generic)
 import qualified Data.Aeson as AE
 #endif
 
+import Data.Text.AhoCorasick.Searcher (Searcher)
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnitIndex, Text)
-import Data.Text.AhoCorasick.Searcher (Searcher)
 
-import qualified Data.Text.Utf8 as Utf8
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Searcher as Searcher
+import qualified Data.Text.Utf8 as Utf8
 
 -- | Descriptive type alias for strings to search for.
 type Needle = Text
@@ -115,6 +116,13 @@ compose (Replacer case1 searcher1) (Replacer case2 searcher2)
       in
         Just $ Replacer case1 searcher
 
+-- | Modify the replacement of a replacer. It doesn't modify the needles.
+mapReplacement :: (Replacement -> Replacement) -> Replacer -> Replacer
+mapReplacement f replacer = replacer{
+  replacerSearcher = Searcher.mapSearcher
+    (\p -> p {needleReplacement = f (needleReplacement p)})
+    (replacerSearcher replacer)
+}
 -- A match collected while running replacements. It is isomorphic to the Match
 -- reported by the automaton, but the data is arranged in a more useful way:
 -- as the start index and length of the match, and the replacement.

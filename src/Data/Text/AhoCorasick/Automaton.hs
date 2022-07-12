@@ -5,6 +5,7 @@
 -- repository root.
 
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -113,7 +114,7 @@ data AcMachine v = AcMachine
   -- ^ A lookup table for transitions from the root state, an optimization to
   -- avoid having to walk all transitions, at the cost of using a bit of
   -- additional memory.
-  } deriving (Generic)
+  } deriving (Generic, Functor)
 
 instance NFData v => NFData (AcMachine v)
 
