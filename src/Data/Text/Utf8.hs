@@ -5,11 +5,14 @@
 -- repository root.
 
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE UnboxedTuples #-}
 
 -- | This module provides functions that allow treating 'Text' values as series of UTF-8 code units
 -- instead of characters. Any calls to 'Text' in @alfred-margaret@ go through this module.
@@ -39,6 +42,8 @@ module Data.Text.Utf8
       -- $indexing
     , indexCodeUnit
     , unsafeIndexCodePoint
+    , unsafeIndexEndOfCodePoint
+    , unsafeIndexAnywhereInCodePoint
     , unsafeIndexCodeUnit
       -- * Slicing Functions
       --
@@ -51,6 +56,8 @@ module Data.Text.Utf8
     , arrayContents
     , isArrayPinned
     , unsafeIndexCodePoint'
+    , unsafeIndexEndOfCodePoint'
+    , unsafeIndexAnywhereInCodePoint'
     , unsafeIndexCodeUnit'
       -- * General Functions
       --
@@ -71,7 +78,7 @@ import Data.Hashable (Hashable)
 import Data.Text.Internal (Text (..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Data.Primitive (ByteArray(ByteArray), byteArrayFromList)
+import Data.Primitive (ByteArray (ByteArray), Prim, byteArrayFromList)
 #if defined(HAS_AESON)
 import Data.Aeson (FromJSON, ToJSON)
 #endif
@@ -98,9 +105,9 @@ newtype CodeUnitIndex = CodeUnitIndex
     }
     deriving stock (Eq, Ord, Show, Generic, Bounded)
 #if defined(HAS_AESON)
-    deriving newtype (Hashable, Num, NFData, FromJSON, ToJSON)
+    deriving newtype (Prim, Hashable, Num, NFData, FromJSON, ToJSON)
 #else
-    deriving newtype (Hashable, Num, NFData)
+    deriving newtype (Prim, Hashable, Num, NFData)
 #endif
 
 {-# INLINABLE unpackUtf8 #-}
@@ -163,6 +170,16 @@ isCaseInvariant = Text.all (\c -> Char.toLower c == Char.toUpper c)
 --
 -- Functions that turns code unit sequences into code point sequences.
 
+-- | Decode a single UTF-8 code unit into its code point.
+-- The given code unit should have the following format:
+--
+-- > ┌───────────────┐
+-- > │0 x x x x x x x│
+-- > └───────────────┘
+decode1 :: CodeUnit -> CodePoint
+decode1 cu0 =
+  Char.chr $ fromIntegral cu0
+
 -- | Decode 2 UTF-8 code units into their code point.
 -- The given code units should have the following format:
 --
@@ -214,21 +231,32 @@ decodeUtf8 cus = error $ "Invalid UTF-8 input sequence at " ++ show (take 4 cus)
 -- | Does exactly the same thing as 'unsafeIndexCodePoint'', but on 'Text' values.
 {-# INLINE unsafeIndexCodePoint #-}
 unsafeIndexCodePoint :: Text -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
-unsafeIndexCodePoint (Text !u8data !off !_len) (CodeUnitIndex !index) =
-  unsafeIndexCodePoint' u8data $ CodeUnitIndex $ off + index
+unsafeIndexCodePoint (Text !u8data !off !_len) !index =
+  unsafeIndexCodePoint' u8data $ CodeUnitIndex off + index
+
+-- | Like 'unsafeIndexEndOfCodePoint'', but on 'Text' values
+{-# INLINE unsafeIndexEndOfCodePoint #-}
+unsafeIndexEndOfCodePoint :: Text -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
+unsafeIndexEndOfCodePoint (Text !u8data !off !_len) !index =
+  unsafeIndexEndOfCodePoint' u8data $ CodeUnitIndex off + index
+
+{-# INLINE unsafeIndexAnywhereInCodePoint #-}
+unsafeIndexAnywhereInCodePoint :: Text -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
+unsafeIndexAnywhereInCodePoint (Text !u8data !off !_len) !index =
+  unsafeIndexAnywhereInCodePoint' u8data $ CodeUnitIndex off + index
 
 -- | Get the code unit at the given 'CodeUnitIndex'.
 -- Performs bounds checking.
 {-# INLINE indexCodeUnit #-}
 indexCodeUnit :: Text -> CodeUnitIndex -> CodeUnit
-indexCodeUnit !text (CodeUnitIndex !index)
-  | index < 0 || index >= codeUnitIndex (lengthUtf8 text) = error $ "Index out of bounds " ++ show index
-  | otherwise = unsafeIndexCodeUnit text $ CodeUnitIndex index
+indexCodeUnit !text !index
+  | index < 0 || index >= lengthUtf8 text = error $ "Index out of bounds " ++ show index
+  | otherwise = unsafeIndexCodeUnit text index
 
 {-# INLINE unsafeIndexCodeUnit #-}
 unsafeIndexCodeUnit :: Text -> CodeUnitIndex -> CodeUnit
-unsafeIndexCodeUnit (Text !u8data !off !_len) (CodeUnitIndex !index) =
-  unsafeIndexCodeUnit' u8data $ CodeUnitIndex $ off + index
+unsafeIndexCodeUnit (Text !u8data !off !_len) !index =
+  unsafeIndexCodeUnit' u8data $ CodeUnitIndex off + index
 
 -- $slicingFunctions
 --
@@ -289,16 +317,80 @@ arrayContents (TextArray.ByteArray ba#) = Exts.Ptr (Exts.byteArrayContents# ba#)
 -- Returns garbage if there is no valid code point at that position.
 -- Does not perform bounds checking.
 -- See 'decode2', 'decode3' and 'decode4' for the expected format of multi-byte code points.
-{-# INLINE unsafeIndexCodePoint' #-}
 unsafeIndexCodePoint' :: TextArray.Array -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
-unsafeIndexCodePoint' !u8data (CodeUnitIndex !idx)
-  | cu0 < 0xc0 = (1, Char.chr $ fromIntegral cu0)
-  | cu0 < 0xe0 = (2, decode2 cu0 (cuAt 1))
-  | cu0 < 0xf0 = (3, decode3 cu0 (cuAt 1) (cuAt 2))
-  | otherwise = (4, decode4 cu0 (cuAt 1) (cuAt 2) (cuAt 3))
+{-# INLINE unsafeIndexCodePoint' #-}
+unsafeIndexCodePoint' !u8data !idx =
+  decodeN (cuAt 0) (cuAt 1) (cuAt 2) (cuAt 3)
   where
-    cuAt !i = unsafeIndexCodeUnit' u8data $ CodeUnitIndex $ idx + i
-    !cu0 = cuAt 0
+    cuAt !i = unsafeIndexCodeUnit' u8data $ idx + i
+
+decodeN :: CodeUnit -> CodeUnit -> CodeUnit -> CodeUnit -> (CodeUnitIndex, CodePoint)
+{-# INLINE decodeN #-}
+decodeN cu0 cu1 cu2 cu3
+  | cu0 < 0xc0 = (1, decode1 cu0)
+  | cu0 < 0xe0 = (2, decode2 cu0 cu1)
+  | cu0 < 0xf0 = (3, decode3 cu0 cu1 cu2)
+  | otherwise = (4, decode4 cu0 cu1 cu2 cu3)
+
+
+
+-- | Similar to unsafeIndexCodePoint', but assumes that the given index is the
+-- end of a utf8 codepoint. It returns the decoded code point and the index
+-- _before_ the code point. The resulting index could be passed directly to
+-- unsafeIndexEndOfCodePoint' again to decode the _previous_ code point.
+unsafeIndexEndOfCodePoint' :: TextArray.Array -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
+{-# INLINE unsafeIndexEndOfCodePoint' #-}
+unsafeIndexEndOfCodePoint' !u8data !idx =
+  let
+    cuAt !i = unsafeIndexCodeUnit' u8data $ idx - i
+    -- Second, third and fourth bytes of a codepoint are always 10xxxxxx, while
+    -- the first byte can be 0xxxxxxx or 11yyyyyy.
+    isFirstByte !cu = cu .&. 0b1100_0000 /= 0b1000_0000
+    cu0 = cuAt 0
+  in
+    if isFirstByte cu0
+    then (idx - 1, decode1 cu0)
+    else
+      let cu1 = cuAt 1 in
+      if isFirstByte cu1
+      then (idx - 2, decode2 cu1 cu0)
+      else
+        let cu2 = cuAt 2 in
+        if isFirstByte cu2
+        then (idx - 3, decode3 cu2 cu1 cu0)
+        else
+          let cu3 = cuAt 3 in
+          if isFirstByte cu3
+          then (idx - 4, decode4 cu3 cu2 cu1 cu0)
+          else
+            error "unsafeIndexEndOfCodePoint' could not find valid UTF8 codepoint"
+
+unsafeIndexAnywhereInCodePoint' :: TextArray.Array -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
+{-# INLINE unsafeIndexAnywhereInCodePoint' #-}
+unsafeIndexAnywhereInCodePoint' !u8data !idx =
+  let
+    cuAt !i = unsafeIndexCodeUnit' u8data $ idx + i
+    -- Second, third and fourth bytes of a codepoint are always 10xxxxxx, while
+    -- the first byte can be 0xxxxxxx or 11yyyyyy.
+    isFirstByte !cu = cu .&. 0b1100_0000 /= 0b1000_0000
+    cu0 = cuAt 0
+  in
+    if isFirstByte cu0
+    then (idx - 1, snd $ decodeN cu0 (cuAt 1) (cuAt 2) (cuAt 3))
+    else
+      let cu00 = cuAt (-1) in
+      if isFirstByte cu00
+      then (idx - 2, snd $ decodeN cu00 cu0 (cuAt 1) (cuAt 2))
+      else
+        let cu000 = cuAt (-2) in
+        if isFirstByte cu000
+        then (idx - 3, snd $ decodeN cu000 cu00 cu0 (cuAt 1))
+        else
+          let cu0000 = cuAt (-3) in
+          if isFirstByte cu0000
+          then (idx - 4, snd $ decodeN cu0000 cu000 cu00 cu0)
+          else
+            error "unsafeIndexAnywhereInCodePoint' could not find valid UTF8 codepoint"
 
 {-# INLINE unsafeIndexCodeUnit' #-}
 unsafeIndexCodeUnit' :: TextArray.Array -> CodeUnitIndex -> CodeUnit

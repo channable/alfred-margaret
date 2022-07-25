@@ -51,6 +51,9 @@ library
                      , Data.Text.BoyerMoore.Automaton
                      , Data.Text.BoyerMoore.Replacer
                      , Data.Text.BoyerMoore.Searcher
+                     , Data.Text.BoyerMooreCI.Automaton
+                     , Data.Text.BoyerMooreCI.Replacer
+                     , Data.Text.BoyerMooreCI.Searcher
                      , Data.TypedByteArray
   build-depends:
       base             >= 4.7 && < 5
