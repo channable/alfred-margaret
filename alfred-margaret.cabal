@@ -108,6 +108,18 @@ benchmark uvector-vs-tba
                      , criterion
   default-language:    Haskell2010
 
+benchmark bm
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  hs-source-dirs:      bench/bm
+  ghc-options:         -Wall -Wincomplete-record-updates -Wno-orphans
+  build-depends:       base >= 4.7 && < 5
+                     , alfred-margaret
+                     , deepseq
+                     , criterion
+                     , text
+  default-language:    Haskell2010
+
 executable dump-automaton
   main-is: Main.hs
   hs-source-dirs:
