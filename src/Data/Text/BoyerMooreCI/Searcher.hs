@@ -100,7 +100,7 @@ containsAny :: Searcher () -> Text -> Bool
 containsAny !searcher !text =
   let
     -- On the first match, return True immediately.
-    f _acc _match = BoyerMoore.Done True
+    f _acc _matchStart _matchEnd = BoyerMoore.Done True
   in
     any (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
 -- | Build a 'Searcher' that returns the needle's index in the needle list when it matches.
@@ -116,6 +116,6 @@ containsAll :: Searcher Int -> Text -> Bool
 containsAll !searcher !text =
   let
     -- On the first match, return True immediately.
-    f _acc _match = BoyerMoore.Done True
+    f _acc _matchStart _matchEnd = BoyerMoore.Done True
   in
     all (\(automaton, _) -> BoyerMoore.runText False f automaton text) (automata searcher)

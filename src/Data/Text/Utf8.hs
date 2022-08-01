@@ -43,8 +43,6 @@ module Data.Text.Utf8
       -- $indexing
     , indexCodeUnit
     , unsafeIndexCodePoint
-    , unsafeIndexEndOfCodePoint
-    , unsafeIndexAnywhereInCodePoint
     , unsafeIndexCodeUnit
       -- * Slicing Functions
       --
@@ -57,9 +55,11 @@ module Data.Text.Utf8
     , arrayContents
     , isArrayPinned
     , unsafeIndexCodePoint'
+    , unsafeIndexCodeUnit'
+    , BackwardsIter (..)
     , unsafeIndexEndOfCodePoint'
     , unsafeIndexAnywhereInCodePoint'
-    , unsafeIndexCodeUnit'
+
       -- * General Functions
       --
       -- $generalFunctions
@@ -237,17 +237,6 @@ unsafeIndexCodePoint :: Text -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
 unsafeIndexCodePoint (Text !u8data !off !_len) !index =
   unsafeIndexCodePoint' u8data $ CodeUnitIndex off + index
 
--- | Like 'unsafeIndexEndOfCodePoint'', but on 'Text' values
-{-# INLINE unsafeIndexEndOfCodePoint #-}
-unsafeIndexEndOfCodePoint :: Text -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
-unsafeIndexEndOfCodePoint (Text !u8data !off !_len) !index =
-  unsafeIndexEndOfCodePoint' u8data $ CodeUnitIndex off + index
-
-{-# INLINE unsafeIndexAnywhereInCodePoint #-}
-unsafeIndexAnywhereInCodePoint :: Text -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
-unsafeIndexAnywhereInCodePoint (Text !u8data !off !_len) !index =
-  unsafeIndexAnywhereInCodePoint' u8data $ CodeUnitIndex off + index
-
 -- | Get the code unit at the given 'CodeUnitIndex'.
 -- Performs bounds checking.
 {-# INLINE indexCodeUnit #-}
@@ -337,11 +326,17 @@ decodeN cu0 cu1 cu2 cu3
 
 
 
+data BackwardsIter = BackwardsIter
+  { backwardsIterNext :: {-# UNPACK #-} !CodeUnitIndex
+  , backwardsIterChar :: {-# UNPACK #-} !CodePoint
+  , backwardsIterEndOfChar :: {-# UNPACK #-} !CodeUnitIndex
+  }
+
 -- | Similar to unsafeIndexCodePoint', but assumes that the given index is the
 -- end of a utf8 codepoint. It returns the decoded code point and the index
 -- _before_ the code point. The resulting index could be passed directly to
 -- unsafeIndexEndOfCodePoint' again to decode the _previous_ code point.
-unsafeIndexEndOfCodePoint' :: TextArray.Array -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
+unsafeIndexEndOfCodePoint' :: TextArray.Array -> CodeUnitIndex -> BackwardsIter
 {-# INLINE unsafeIndexEndOfCodePoint' #-}
 unsafeIndexEndOfCodePoint' !u8data !idx =
   let
@@ -352,23 +347,23 @@ unsafeIndexEndOfCodePoint' !u8data !idx =
     cu0 = cuAt 0
   in
     if isFirstByte cu0
-    then (idx - 1, decode1 cu0)
+    then BackwardsIter (idx - 1) (decode1 cu0) idx
     else
       let cu1 = cuAt 1 in
       if isFirstByte cu1
-      then (idx - 2, decode2 cu1 cu0)
+      then BackwardsIter (idx - 2) (decode2 cu1 cu0) idx
       else
         let cu2 = cuAt 2 in
         if isFirstByte cu2
-        then (idx - 3, decode3 cu2 cu1 cu0)
+        then BackwardsIter (idx - 3) (decode3 cu2 cu1 cu0) idx
         else
           let cu3 = cuAt 3 in
           if isFirstByte cu3
-          then (idx - 4, decode4 cu3 cu2 cu1 cu0)
+          then BackwardsIter (idx - 4) (decode4 cu3 cu2 cu1 cu0) idx
           else
             error "unsafeIndexEndOfCodePoint' could not find valid UTF8 codepoint"
 
-unsafeIndexAnywhereInCodePoint' :: TextArray.Array -> CodeUnitIndex -> (CodeUnitIndex, CodePoint)
+unsafeIndexAnywhereInCodePoint' :: TextArray.Array -> CodeUnitIndex -> BackwardsIter
 {-# INLINE unsafeIndexAnywhereInCodePoint' #-}
 unsafeIndexAnywhereInCodePoint' !u8data !idx =
   let
@@ -377,21 +372,23 @@ unsafeIndexAnywhereInCodePoint' !u8data !idx =
     -- the first byte can be 0xxxxxxx or 11yyyyyy.
     isFirstByte !cu = cu .&. 0b1100_0000 /= 0b1000_0000
     cu0 = cuAt 0
+
+    makeBackwardsIter next (l, cp) = BackwardsIter next cp (next + l)
   in
     if isFirstByte cu0
-    then (idx - 1, snd $ decodeN cu0 (cuAt 1) (cuAt 2) (cuAt 3))
+    then makeBackwardsIter (idx - 1) $ decodeN cu0 (cuAt 1) (cuAt 2) (cuAt 3)
     else
       let cu00 = cuAt (-1) in
       if isFirstByte cu00
-      then (idx - 2, snd $ decodeN cu00 cu0 (cuAt 1) (cuAt 2))
+      then makeBackwardsIter (idx - 2) $ decodeN cu00 cu0 (cuAt 1) (cuAt 2)
       else
         let cu000 = cuAt (-2) in
         if isFirstByte cu000
-        then (idx - 3, snd $ decodeN cu000 cu00 cu0 (cuAt 1))
+        then makeBackwardsIter (idx - 3) $ decodeN cu000 cu00 cu0 (cuAt 1)
         else
           let cu0000 = cuAt (-3) in
           if isFirstByte cu0000
-          then (idx - 4, snd $ decodeN cu0000 cu000 cu00 cu0)
+          then makeBackwardsIter (idx - 4) $ decodeN cu0000 cu000 cu00 cu0
           else
             error "unsafeIndexAnywhereInCodePoint' could not find valid UTF8 codepoint"
 

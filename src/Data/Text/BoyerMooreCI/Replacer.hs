@@ -42,10 +42,8 @@ replaceSingleLimited needle replacement haystack maxLength
       , rsLength = 0
       }
 
-    foundMatch rs matchStart =
+    foundMatch rs matchStart matchEnd =
       let
-        matchEnd = matchStart + needleLength
-
         -- Slice the part of the haystack between the end of the previous match
         -- and the start of the current match
         haystackPartLength = matchStart - rsPreviousMatchEnd rs
@@ -58,7 +56,7 @@ replaceSingleLimited needle replacement haystack maxLength
 
         newState = ReplaceState
           { rsChunks = newChunks
-          , rsPreviousMatchEnd = matchEnd
+          , rsPreviousMatchEnd = matchEnd + 1
           , rsLength = newLength
           }
       in

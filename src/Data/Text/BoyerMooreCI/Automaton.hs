@@ -46,7 +46,7 @@ import qualified Data.Aeson as AE
 #endif
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Utf8 (CodePoint, CodeUnitIndex (..))
+import Data.Text.Utf8 (BackwardsIter (..), CodePoint, CodeUnitIndex (..))
 import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Char as Char
@@ -121,14 +121,14 @@ buildAutomaton pattern_ =
 -- this module.
 runText  :: forall a
   . a
-  -> (a -> CodeUnitIndex -> Next a)
+  -> (a -> CodeUnitIndex -> CodeUnitIndex -> Next a)
   -> Automaton
   -> Text
   -> a
 {-# INLINE runText #-}
 runText seed f automaton !text
   | TBA.null pattern_ = seed
-  | otherwise = go seed initialHaystackMin (initialHaystackMin + minPatternSkip - 1)
+  | otherwise = alignPattern seed initialHaystackMin (initialHaystackMin + minPatternSkip - 1)
   where
     Automaton pattern_ _ suffixTable badCharTable minPatternSkip = automaton
 
@@ -142,70 +142,82 @@ runText seed f automaton !text
     -- offset, and later by what we matched before.
     initialHaystackMin = case text of Text _ offset _ -> CodeUnitIndex offset
 
-    go
+    -- This is our _outer_ loop, called when the pattern is moved
+    alignPattern
       :: a
       -> CodeUnitIndex  -- Don't read before this point in the haystack
-      -> CodeUnitIndex  -- End of pattern must be aligned at this point in the haystack
+      -> CodeUnitIndex  -- End of pattern is aligned at this point in the haystack
       -> a
-    {-# INLINE go #-}
-    go !result !haystackMin !alignmentEnd
+    {-# INLINE alignPattern #-}
+    alignPattern !result !haystackMin !alignmentEnd
       | alignmentEnd > haystackMax = result
-      | otherwise = matchLoop alignmentEnd (TBA.length pattern_ - 1)
-      where
-        -- Compare the pattern back-to-front with the haystack
-        matchLoop :: CodeUnitIndex -> Int -> a
-        matchLoop !haystackIndex !patternIndex
+      | otherwise =
+          let
+            !iter = Utf8.unsafeIndexAnywhereInCodePoint' (case text of Text d _ _ -> d) alignmentEnd
+            !patternIndex = TBA.length pattern_ - 1
+            -- End of char may be somewhere different than where we started looking
+            !alignmentEnd' = backwardsIterEndOfChar iter
+          in
+            matchLoop result haystackMin alignmentEnd' iter patternIndex
 
-          -- We found a match (all pattern characters matched)
-          | patternIndex < 0 =
-              case f result (haystackIndex + 1) of
-                Done final -> final
-                -- `haystackIndex` now points to the character just before the match starts
-                -- Adding `patLen` once points to the last character of the match,
-                -- Adding `patLen` once more points to the earliest character where
-                -- we can find a non-overlapping match.
-                Step intermediate ->
-                  let haystackMin' = alignmentEnd + 1  -- Disallow overlapping matches
-                      alignmentEnd' = alignmentEnd + minPatternSkip
-                  in go intermediate haystackMin' alignmentEnd'
+    -- The _inner_ loop, called for every pattern character back to front within a pattern alignment.
+    matchLoop
+      :: a
+      -> CodeUnitIndex  -- haystackMin, don't read before this point in the haystack
+      -> CodeUnitIndex  -- (adjusted) alignmentEnd, end of pattern is aligned at this point in the haystack
+      -> BackwardsIter
+      -> Int            -- index in the pattern
+      -> a
+    matchLoop !result !haystackMin !alignmentEnd !iter !patternIndex =
+      let
+        !haystackCodePointLower = Utf8.lowerCodePoint (backwardsIterChar iter)
+      in
+        case haystackCodePointLower == TBA.unsafeIndex pattern_ patternIndex of
 
-          -- The pattern may be aligned in such a way that the start is
-          -- before the start of the haystack. We don't have a character to
-          -- use for a badCharLookup, but the suffixLookup should work well
-          -- if we end up in this case.
-          | haystackIndex < haystackMin =
-              let alignmentEnd' = alignmentEnd + suffixLookup suffixTable patternIndex
-              in go result haystackMin alignmentEnd'
+          True | patternIndex == 0 ->
+            -- We found a complete match (all pattern characters matched)
+            case f result (backwardsIterNext iter + 1) alignmentEnd of
+              Done final -> final
+              Step intermediate ->
+                let haystackMin' = alignmentEnd + 1  -- Disallow overlapping matches
+                    alignmentEnd' = alignmentEnd + minPatternSkip
+                in alignPattern intermediate haystackMin' alignmentEnd'
 
-          | otherwise =
-              let
-                !(!haystackIndex', !haystackCodePoint) =
-                  Utf8.unsafeIndexAnywhereInCodePoint' (case text of Text d _ _ -> d) haystackIndex
-                !haystackCodePointLower = Utf8.lowerCodePoint haystackCodePoint
-              in
-                if haystackCodePointLower == TBA.unsafeIndex pattern_ patternIndex
-                then
-                  -- Characters match, try the pair before
-                  matchLoop haystackIndex' (patternIndex - 1)
-                else
-                  -- We know it's not a match, the characters differ at the current position
-                  let
-                    -- The bad character table tells us how far we can advance to the right so that the
-                    -- character at the current position in the input string, where matching failed,
-                    -- is lined up with it's rightmost occurrence in the pattern.
-                    !fromBadChar =
-                      haystackIndex + badCharLookup badCharTable haystackCodePointLower
+          -- The pattern may be aligned in such a way that the start is before
+          -- the start of the haystack (despite the minPatternSkip that we
+          -- added). We don't have a character to use for a badCharLookup, but
+          -- the suffixLookup should work well if we end up in this case.
+          True | backwardsIterNext iter < haystackMin ->
+            let alignmentEnd' = alignmentEnd + suffixLookup suffixTable patternIndex
+            in alignPattern result haystackMin alignmentEnd'
 
-                    -- This is always at least 1, ensuring that we make progress
-                    -- Suffixlookup tells us how far we can move the pattern
-                    !fromSuffixLookup =
-                      alignmentEnd + suffixLookup suffixTable patternIndex
+          -- We continue by comparing the next character
+          True ->
+            let
+              next = backwardsIterNext iter
+              !iter' = Utf8.unsafeIndexEndOfCodePoint' (case text of Text d _ _ -> d) next
+            in
+              matchLoop result haystackMin alignmentEnd iter' (patternIndex - 1)
 
-                    !alignmentEnd' = max fromBadChar fromSuffixLookup
+          -- Character did _not_ match at current position. Check how far the pattern has to move.
+          False ->
+            let
+              -- The bad character table tells us how far we can advance to the right so that the
+              -- character at the current position in the input string, where matching failed,
+              -- is lined up with it's rightmost occurrence in the pattern.
+              !fromBadChar =
+                backwardsIterEndOfChar iter + badCharLookup badCharTable haystackCodePointLower
 
-                  in
-                    -- Minimum stays the same
-                    go result haystackMin alignmentEnd'
+              -- This is always at least 1, ensuring that we make progress
+              -- Suffixlookup tells us how far we can move the pattern
+              !fromSuffixLookup =
+                alignmentEnd + suffixLookup suffixTable patternIndex
+
+              !alignmentEnd' = max fromBadChar fromSuffixLookup
+
+            in
+              -- Minimum stays the same
+              alignPattern result haystackMin alignmentEnd'
 
 -- | Length of the matched pattern measured in UTF-8 code units (bytes).
 patternLength :: Automaton -> CodeUnitIndex

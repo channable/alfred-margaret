@@ -111,7 +111,7 @@ bmciCount :: Text.Text -> Text.Text -> Int
 bmciCount needle =
   let
     !automaton = BoyerMooreCI.buildAutomaton needle
-    onMatch !n _match = BoyerMooreCI.Step (n + 1)
+    onMatch !n _matchStart _matchEnd = BoyerMooreCI.Step (n + 1)
   in
     \haystack -> BoyerMooreCI.runText 0 onMatch automaton haystack
 
@@ -120,7 +120,7 @@ bmciContains :: Text.Text -> Text.Text -> Bool
 bmciContains needle =
   let
     !automaton = BoyerMooreCI.buildAutomaton needle
-    onMatch _ _match = BoyerMooreCI.Done True
+    onMatch _ _matchStart _matchEnd = BoyerMooreCI.Done True
   in
     \haystack -> BoyerMooreCI.runText False onMatch automaton haystack
 
