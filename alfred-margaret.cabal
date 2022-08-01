@@ -44,6 +44,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Data.Text.CaseSensitivity
                      , Data.Text.Utf8
+                     , Data.Text.Utf8.Unlower
                      , Data.Text.AhoCorasick.Automaton
                      , Data.Text.AhoCorasick.Replacer
                      , Data.Text.AhoCorasick.Searcher
@@ -81,6 +82,7 @@ test-suite test-suite
   main-is:             Main.hs
   other-modules:       Data.Text.AhoCorasickSpec
                      , Data.Text.BoyerMooreSpec
+                     , Data.Text.BoyerMooreCISpec
                      , Data.Text.Utf8Spec
                      , Data.Text.Orphans
   hs-source-dirs:      tests

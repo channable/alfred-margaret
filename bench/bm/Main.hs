@@ -43,6 +43,7 @@ main = defaultMain
       , bench "Count Aho CI" $ nf (ahociCount needle) haystack
       , bench "Count BoyerMoore" $ nf (bmCount needle) haystack
       , bench "Count BoyerMoore CI" $ nf (bmciCount needle) haystack
+      , bench "Count Aho CI multineedle" $ nf (ahocimultiCount needle) haystack
       , bench "Count Text.count" $ nf (Text.count needle) haystack
       -- This naive case insensitive count is really slow. We leave it out
       -- because it throws off the plot scale.
@@ -85,6 +86,16 @@ ahociCount needle =
     onMatch !n _match = Aho.Step (n + 1)
   in
     \haystack -> Aho.runLower 0 onMatch automaton haystack
+
+
+ahocimultiCount :: Text.Text -> Text.Text -> Int
+{-# NOINLINE ahocimultiCount #-}
+ahocimultiCount needle =
+  let
+    !automaton = Aho.build $ map (\n -> (n, ())) $ Aho.needleCasings needle
+    onMatch !n _match = Aho.Step (n + 1)
+  in
+    \haystack -> Aho.runText 0 onMatch automaton haystack
 
 ahociContains :: Text.Text -> Text.Text -> Bool
 {-# NOINLINE ahociContains #-}

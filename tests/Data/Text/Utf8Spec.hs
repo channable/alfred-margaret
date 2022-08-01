@@ -11,6 +11,7 @@ import Test.QuickCheck (Gen, choose, forAllShrink, shrink)
 import qualified Data.Char as Char
 
 import Data.Text.Orphans ()
+import Data.Text.Utf8.Unlower (refUnlowerCodePoint)
 
 import qualified Data.Text.Utf8 as Utf8
 
@@ -45,6 +46,25 @@ spec = do
 
         prop "is equivalent to Char.toLower on all of Unicode" $ \c ->
             Utf8.lowerCodePoint c `shouldBe` Char.toLower c
+
+    describe "unlowerCodePoint" $ do
+
+      it "should return nothing if it's not a lower case of anything" $ do
+        refUnlowerCodePoint 'A' `shouldBe` ""
+        refUnlowerCodePoint 'ẞ' `shouldBe` ""
+
+      it "should return itself if it doesn't have any casings" $ do
+        refUnlowerCodePoint '1' `shouldBe` "1"
+
+      it "can return multiple values" $ do
+        refUnlowerCodePoint 'a' `shouldBe` "aA"
+        refUnlowerCodePoint 'ß' `shouldBe` "ẞß"
+        refUnlowerCodePoint 'i' `shouldBe` "İiI"
+
+      it "should always equal the reference implementation" $ do
+        forM_ [minBound..maxBound] $ \c ->
+          Utf8.unlowerCodePoint c `shouldBe` refUnlowerCodePoint c
+
 
     describe "dropWhile" $ do
 

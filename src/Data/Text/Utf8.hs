@@ -26,6 +26,7 @@ module Data.Text.Utf8
     , isCaseInvariant
     , lengthUtf8
     , lowerCodePoint
+    , unlowerCodePoint
     , lowerUtf8
     , toLowerAscii
     , unicode2utf8
@@ -82,6 +83,7 @@ import Data.Primitive (ByteArray (ByteArray), Prim, byteArrayFromList)
 #if defined(HAS_AESON)
 import Data.Aeson (FromJSON, ToJSON)
 #endif
+import Data.Text.Utf8.Unlower (unlowerCodePoint)
 
 import qualified Data.Char as Char
 import qualified Data.Text as Text
@@ -149,6 +151,7 @@ lowerCodePoint cp
 
 -- | Convert a Unicode Code Point 'c' into a list of UTF-8 code units (bytes).
 unicode2utf8 :: (Ord a, Num a, Bits a) => a -> [a]
+{-# INLINE unicode2utf8 #-}
 unicode2utf8 c
     | c < 0x80    = [c]
     | c < 0x800   = [0xc0 .|. (c `shiftR` 6), 0x80 .|. (0x3f .&. c)]

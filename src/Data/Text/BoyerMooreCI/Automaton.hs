@@ -30,9 +30,10 @@ module Data.Text.BoyerMooreCI.Automaton
     , patternLength
     , patternText
     , runText
-    ) where
 
-import Prelude hiding (length)
+      -- Exposed for testing
+    , minimumSkipForCodePoint
+    ) where
 
 import Control.DeepSeq (NFData)
 import Control.Monad.ST (runST)
@@ -48,6 +49,7 @@ import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodePoint, CodeUnitIndex (..))
 import Data.TypedByteArray (Prim, TypedByteArray)
 
+import qualified Data.Char as Char
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as Text
 import qualified Data.Text.Utf8 as Utf8
@@ -219,15 +221,24 @@ patternText = Text.pack . TBA.toList . automatonPattern
 --
 -- It must always be a low (safe) estimate, otherwise the algorithm can miss
 -- matches. It must account for any variation of upper/lower case characters
--- that may occur in the haystack.
+-- that may occur in the haystack. In most cases, this is the same number of
+-- bytes as for the given codepoint
 --
--- For now, we'll just assume that each pattern character is at least 1 byte in
--- the haystack. This is true by definition because we only use 'simple case
--- folding' (i.e. the number of code points doesn't change when upper/lower
--- casing), but it's an underestimation because for many characters you could
--- know that it will always be more than 1 byte.
+--     minimumSkipForCodePoint 'a' == 1
+--     minimumSkipForCodePoint 'д' == 2
+--     minimumSkipForCodePoint 'ⓟ' == 3
+--     minimumSkipForCodePoint '🎄' == 4
+--
 minimumSkipForCodePoint :: CodePoint -> CodeUnitIndex
-minimumSkipForCodePoint _cp = CodeUnitIndex 1
+minimumSkipForCodePoint cp =
+  case Char.ord cp of
+    c | c < 0x80     -> 1
+    c | c < 0x800    -> 2
+    -- The letters ⱥ and ⱦ are 3 UTF8 bytes, but have unlowerings Ⱥ and Ⱦ of 2 bytes
+    0x2C65           -> 2  -- ⱥ
+    0x2C66           -> 2  -- ⱦ
+    c | c < 0x10000  -> 3
+    _                -> 4
 
 minimumSkipForVector :: TypedByteArray CodePoint -> CodeUnitIndex
 minimumSkipForVector = TBA.foldr (\cp s -> s + minimumSkipForCodePoint cp) 0
