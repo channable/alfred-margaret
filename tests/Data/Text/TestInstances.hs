@@ -1,9 +1,10 @@
 module Data.Text.TestInstances where
 
-import Data.Text (Text)
+import Data.Text.Internal (Text (..))
 import Test.QuickCheck (Arbitrary (..), Gen)
 
 import qualified Data.Text as Text
+import qualified Data.Text.Array as TextArray
 import qualified Test.QuickCheck as QuickCheck
 import qualified Test.QuickCheck.Gen as Gen
 
@@ -19,6 +20,19 @@ instance Arbitrary Utf8.CodeUnitIndex where
   arbitrary = fmap Utf8.CodeUnitIndex arbitrary
 
 
+
+-- | Copy the text such that it has an arbitrary offset, but the represented
+-- text stays the same.
+arbitraryOffset :: Text -> Gen Text
+arbitraryOffset (Text sourceData sourceOffset sourceLength) = do
+  QuickCheck.Positive destOffset <- arbitrary
+  let destData = TextArray.run $ do
+        arr <- TextArray.new (destOffset + sourceLength)
+        TextArray.copyI sourceLength arr destOffset sourceData sourceOffset
+        pure arr
+  pure $ Text destData destOffset sourceLength
+
+
 -- | Generate random needles and haystacks, such that the needles have a
 -- reasonable probability of occuring in the haystack, which would hardly be the
 -- case if we just generated random texts for all of them.
@@ -31,21 +45,31 @@ instance Arbitrary Utf8.CodeUnitIndex where
 --
 arbitraryNeedleHaystack :: Gen (Text, Text)
 arbitraryNeedleHaystack = do
-  fragments <- arbitraryFragments
+  -- Generate a set of fragments, all within the same arbitrarily chosen alphabet
+  alphabet <- arbitraryAlphabet
+  fragments <- Gen.listOf1 $ Gen.resize 5 (arbitraryFragment alphabet)
   let
     genSmall = Gen.scale (`div` 3) $ Gen.listOf1 $ Gen.elements fragments
     genBig = Gen.scale (* 4) $ Gen.listOf1 $ Gen.elements fragments
-  needle <- fmap Text.concat genSmall
-  haystack <- fmap Text.concat genBig
+  needle <- arbitraryOffset =<< fmap Text.concat genSmall
+  haystack <- arbitraryOffset =<< fmap Text.concat genBig
   pure (needle, haystack)
 
--- | Generate a set of fragments, all within the same arbitrarily chosen alphabet
-arbitraryFragments :: Gen [Text]
-arbitraryFragments = do
+arbitraryNeedlesHaystack :: Gen ([Text], Text)
+arbitraryNeedlesHaystack = do
+  -- Generate a set of fragments, all within the same arbitrarily chosen alphabet
   alphabet <- arbitraryAlphabet
+  fragments <- Gen.listOf1 $ Gen.resize 5 (arbitraryFragment alphabet)
   let
-    genFragment = Text.pack <$> Gen.listOf1 (Gen.elements alphabet)
-  Gen.listOf1 $ Gen.resize 5 genFragment
+    genSmall = Gen.scale (`div` 3) $ Gen.listOf1 $ Gen.elements fragments
+    genBig = Gen.scale (* 4) $ Gen.listOf1 $ Gen.elements fragments
+  needles <- Gen.listOf1 (arbitraryOffset =<< fmap Text.concat genSmall)
+  haystack <- arbitraryOffset =<< fmap Text.concat genBig
+  pure (needles, haystack)
+
+arbitraryFragment :: [Char] -> Gen Text
+arbitraryFragment alphabet =
+  arbitraryOffset =<< Text.pack <$> Gen.listOf1 (Gen.elements alphabet)
 
 arbitraryAlphabet :: Gen [Char]
 arbitraryAlphabet =

@@ -176,20 +176,21 @@ runText seed f automaton !text
 
           True | patternIndex == 0 ->
             -- We found a complete match (all pattern characters matched)
-            case f result (backwardsIterNext iter + 1) alignmentEnd of
-              Done final -> final
-              Step intermediate ->
-                let haystackMin' = alignmentEnd + 1  -- Disallow overlapping matches
-                    alignmentEnd' = alignmentEnd + minPatternSkip
-                in alignPattern intermediate haystackMin' alignmentEnd'
+            let !from = backwardsIterNext iter + 1 - initialHaystackMin
+                !to = alignmentEnd - initialHaystackMin
+            in
+              case f result from to of
+                Done final -> final
+                Step intermediate ->
+                  let haystackMin' = alignmentEnd + 1  -- Disallow overlapping matches
+                      alignmentEnd' = alignmentEnd + minPatternSkip
+                  in alignPattern intermediate haystackMin' alignmentEnd'
 
-          -- The pattern may be aligned in such a way that the start is before
-          -- the start of the haystack (despite the minPatternSkip that we
-          -- added). We don't have a character to use for a badCharLookup, but
-          -- the suffixLookup should work well if we end up in this case.
+          -- The pattern may be aligned in such a way that the start is before the start of the
+          -- haystack. This _only_ happens when ⱥ and ⱦ characters occur (due to how minPatternSkip
+          -- is calculated).
           True | backwardsIterNext iter < haystackMin ->
-            let alignmentEnd' = alignmentEnd + suffixLookup suffixTable patternIndex
-            in alignPattern result haystackMin alignmentEnd'
+            alignPattern result haystackMin (alignmentEnd + 1)
 
           -- We continue by comparing the next character
           True ->
@@ -259,8 +260,11 @@ minimumSkipForVector = TBA.foldr (\cp s -> s + minimumSkipForCodePoint cp) 0
 -- | The suffix table tells us for each codepoint (not byte!) of the pattern how many bytes (not
 -- codepoints!) we can jump ahead if the match fails at that point.
 newtype SuffixTable = SuffixTable (TypedByteArray CodeUnitIndex)
-  deriving stock (Generic, Show)
+  deriving stock (Generic)
   deriving anyclass (NFData)
+
+instance Show SuffixTable where
+  show (SuffixTable table) = "SuffixTable (TBA.toList " <> show (TBA.toList table) <> ")"
 
 -- | Lookup an entry in the suffix table.
 suffixLookup :: SuffixTable -> Int -> CodeUnitIndex
@@ -447,15 +451,16 @@ buildBadCharLookup pattern_ = runST $ do
       [] -> pure badCharMap
       [_] -> pure badCharMap  -- The last pattern character doesn't count.
       (!patChar : !patChars) ->
+        let skipBytes' = skipBytes - minimumSkipForCodePoint patChar in
         if fromEnum patChar < badCharTableSize
         then do
-          TBA.writeTypedByteArray table (fromEnum patChar) skipBytes
-          fillTable badCharMap (skipBytes - minimumSkipForCodePoint patChar) patChars
+          TBA.writeTypedByteArray table (fromEnum patChar) skipBytes'
+          fillTable badCharMap skipBytes' patChars
         else
-          let badCharMap' = HashMap.insert patChar skipBytes badCharMap
-          in fillTable badCharMap' (skipBytes - minimumSkipForCodePoint patChar) patChars
+          let badCharMap' = HashMap.insert patChar skipBytes' badCharMap
+          in fillTable badCharMap' skipBytes' patChars
 
-  badCharMap <- fillTable HashMap.empty (defaultSkip - 1) (TBA.toList pattern_)
+  badCharMap <- fillTable HashMap.empty defaultSkip (TBA.toList pattern_)
 
   tableFrozen <- TBA.unsafeFreezeTypedByteArray table
 

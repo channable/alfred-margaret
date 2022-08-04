@@ -105,11 +105,11 @@ type CodePoint = Char
 newtype CodeUnitIndex = CodeUnitIndex
     { codeUnitIndex :: Int
     }
-    deriving stock (Eq, Ord, Show, Generic, Bounded)
+    deriving stock (Eq, Ord, Generic, Bounded)
 #if defined(HAS_AESON)
-    deriving newtype (Prim, Hashable, Num, NFData, FromJSON, ToJSON)
+    deriving newtype (Show, Prim, Hashable, Num, NFData, FromJSON, ToJSON)
 #else
-    deriving newtype (Prim, Hashable, Num, NFData)
+    deriving newtype (Show, Prim, Hashable, Num, NFData)
 #endif
 
 {-# INLINABLE unpackUtf8 #-}
