@@ -4,6 +4,8 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -22,7 +24,7 @@ import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Orphans ()
+import Data.Text.TestInstances ()
 import Data.Text.Utf8 (Text)
 
 import qualified Data.Text.Utf8 as Text

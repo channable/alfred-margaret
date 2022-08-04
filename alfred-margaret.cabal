@@ -84,7 +84,7 @@ test-suite test-suite
                      , Data.Text.BoyerMooreSpec
                      , Data.Text.BoyerMooreCISpec
                      , Data.Text.Utf8Spec
-                     , Data.Text.Orphans
+                     , Data.Text.TestInstances
   hs-source-dirs:      tests
   ghc-options:         -Wall -Wincomplete-record-updates -Wno-orphans
   build-depends:       base >= 4.7 && < 5

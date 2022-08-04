@@ -10,7 +10,7 @@ import Test.QuickCheck (Gen, choose, forAllShrink, shrink)
 
 import qualified Data.Char as Char
 
-import Data.Text.Orphans ()
+import Data.Text.TestInstances ()
 import Data.Text.Utf8.Unlower (refUnlowerCodePoint)
 
 import qualified Data.Text.Utf8 as Utf8
