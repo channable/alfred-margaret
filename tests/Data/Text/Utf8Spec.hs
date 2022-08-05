@@ -3,8 +3,9 @@
 
 module Data.Text.Utf8Spec where
 
+import Control.Exception (evaluate)
 import Control.Monad (forM_)
-import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
+import Test.Hspec (Spec, anyErrorCall, describe, it, shouldBe, shouldSatisfy, shouldThrow)
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (Gen, choose, forAllShrink, shrink)
 
@@ -100,6 +101,35 @@ spec = do
 
         prop "Ord Text behaves like Ord String" $ \ (a :: String) (b :: String) -> do
             compare (Utf8.pack a) (Utf8.pack b) `shouldBe` compare a b
+
+    describe "skipCodePointsBackwards" $ do
+      it "works with ascii" $ do
+        Utf8.skipCodePointsBackwards "abcd" 3 0 `shouldBe` 3
+        Utf8.skipCodePointsBackwards "abcd" 3 1 `shouldBe` 2
+        Utf8.skipCodePointsBackwards "abcd" 3 2 `shouldBe` 1
+        Utf8.skipCodePointsBackwards "abcd" 3 3 `shouldBe` 0
+
+      it "moves to start of codepoint if you skip 0" $ do
+        Utf8.skipCodePointsBackwards "💩💩" 0 0 `shouldBe` 0
+        Utf8.skipCodePointsBackwards "💩💩" 1 0 `shouldBe` 0
+        Utf8.skipCodePointsBackwards "💩💩" 2 0 `shouldBe` 0
+        Utf8.skipCodePointsBackwards "💩💩" 3 0 `shouldBe` 0
+        Utf8.skipCodePointsBackwards "💩💩" 4 0 `shouldBe` 4
+        Utf8.skipCodePointsBackwards "💩💩" 5 0 `shouldBe` 4
+        Utf8.skipCodePointsBackwards "💩💩" 6 0 `shouldBe` 4
+        Utf8.skipCodePointsBackwards "💩💩" 7 0 `shouldBe` 4
+
+      it "can skip 1 multi-byte codepoint" $ do
+        Utf8.skipCodePointsBackwards "💩💩" 4 1 `shouldBe` 0
+        Utf8.skipCodePointsBackwards "💩💩" 5 1 `shouldBe` 0
+        Utf8.skipCodePointsBackwards "💩💩" 6 1 `shouldBe` 0
+        Utf8.skipCodePointsBackwards "💩💩" 7 1 `shouldBe` 0
+
+      it "throws errors when you read out of bounds" $ do
+        evaluate (Utf8.skipCodePointsBackwards "💩💩" 8 0) `shouldThrow` anyErrorCall
+        evaluate (Utf8.skipCodePointsBackwards "💩💩" 7 2) `shouldThrow` anyErrorCall
+
+
 
 arbitrarySlicingIndices :: Utf8.Text -> Gen (Utf8.CodeUnitIndex, Utf8.CodeUnitIndex)
 arbitrarySlicingIndices example = do

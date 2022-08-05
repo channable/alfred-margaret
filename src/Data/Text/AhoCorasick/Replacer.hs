@@ -36,8 +36,9 @@ import qualified Data.Aeson as AE
 
 import Data.Text.AhoCorasick.Searcher (Searcher)
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Utf8 (CodeUnitIndex, Text)
+import Data.Text.Utf8 (CodeUnitIndex (..), Text)
 
+import qualified Data.Text as Text
 import qualified Data.Text.AhoCorasick.Automaton as Aho
 import qualified Data.Text.AhoCorasick.Searcher as Searcher
 import qualified Data.Text.Utf8 as Utf8
@@ -55,7 +56,8 @@ type Priority = Int
 
 data Payload = Payload
   { needlePriority    :: {-# UNPACK #-} !Priority
-  , needleLength      :: {-# UNPACK #-} !CodeUnitIndex
+  , needleLength      :: {-# UNPACK #-} !Int
+    -- ^ Number of bytes or codepoints, depending on case sensitivity.
   , needleReplacement :: !Replacement
   }
 #if defined(HAS_AESON)
@@ -90,15 +92,18 @@ build caseSensitivity replaces = Replacer caseSensitivity searcher
   where
     searcher = Searcher.buildWithValues caseSensitivity $ zipWith mapNeedle [0..] replaces
     mapNeedle i (needle, replacement) =
-      let
-        needle' = case caseSensitivity of
-          CaseSensitive -> needle
-          IgnoreCase -> Utf8.lowerUtf8 needle
-      in
-        -- Note that we negate i: earlier needles have a higher priority. We
-        -- could avoid it and define larger integers to be lower priority, but
-        -- that made the terminology in this module very confusing.
-        (needle', Payload (-i) (Utf8.lengthUtf8 needle') replacement)
+      -- Note that we negate i: earlier needles have a higher priority. We
+      -- could avoid it and define larger integers to be lower priority, but
+      -- that made the terminology in this module very confusing.
+      case caseSensitivity of
+        CaseSensitive ->
+          (needle, Payload (-i) (codeUnitIndex $ Utf8.lengthUtf8 needle) replacement)
+        IgnoreCase ->
+          -- For case insensitive matches, the byte length does not necessarily match the needle
+          -- byte length. Due to our simple case folding the number of codepoints _does_ match, so
+          -- we put that in the payload instead. It's less efficient because we have to scan
+          -- backwards through the text to obtain the length of a match.
+          (Utf8.lowerUtf8 needle, Payload (-i) (Text.length needle) replacement)
 
 -- | Return the composition `replacer2` after `replacer1`, if they have the same
 -- case sensitivity. If the case sensitivity differs, Nothing is returned.
@@ -167,21 +172,6 @@ removeOverlap matches = case matches of
       then m0 : removeOverlap (m1:ms)
       else removeOverlap (m0:ms)
 
--- | When we iterate through all matches, keep track only of the matches with
--- the highest priority: those are the ones that we will replace first. If we
--- find multiple matches with that priority, remember all of them. If we find a
--- match with lower priority, ignore it, because we already have a more
--- important match. Also, if the priority is `threshold` or higher, ignore the
--- match, so we can exclude matches if we already did a round of replacements
--- for that priority. This way we don't have to build a new automaton after
--- every round of replacements.
-{-# INLINE prependMatch #-}
-prependMatch :: Priority -> (Priority, [Match]) -> Aho.Match Payload -> Aho.Next (Priority, [Match])
-prependMatch !threshold (!pBest, !matches) (Aho.Match pos (Payload pMatch len replacement))
-  | pMatch < threshold && pMatch >  pBest = Aho.Step (pMatch, [Match (pos - len) len replacement])
-  | pMatch < threshold && pMatch == pBest = Aho.Step (pMatch, Match (pos - len) len replacement : matches)
-  | otherwise = Aho.Step (pBest, matches)
-
 run :: Replacer -> Text -> Text
 run replacer = fromJust . runWithLimit replacer maxBound
 
@@ -206,8 +196,8 @@ runWithLimit (Replacer case_ searcher) maxLength = go initialThreshold
       let
         seed = (minBound :: Priority, [])
         matchesWithPriority = case case_ of
-          CaseSensitive -> Aho.runText seed (prependMatch threshold) automaton haystack
-          IgnoreCase -> Aho.runLower seed (prependMatch threshold) automaton haystack
+          CaseSensitive -> Aho.runText seed (prependMatch threshold haystack) automaton haystack
+          IgnoreCase -> Aho.runLower seed (prependMatch threshold haystack) automaton haystack
       in
         case matchesWithPriority of
           -- No match at the given threshold, there is nothing left to do.
@@ -225,3 +215,35 @@ runWithLimit (Replacer case_ searcher) maxLength = go initialThreshold
             | replacementLength matches haystack > maxLength -> Nothing
             | p == minPriority -> Just $ replace (removeOverlap $ sort matches) haystack
             | otherwise -> go p $ replace (removeOverlap $ sort matches) haystack
+
+    -- When we iterate through all matches, keep track only of the matches with
+    -- the highest priority: those are the ones that we will replace first. If we
+    -- find multiple matches with that priority, remember all of them. If we find a
+    -- match with lower priority, ignore it, because we already have a more
+    -- important match. Also, if the priority is `threshold` or higher, ignore the
+    -- match, so we can exclude matches if we already did a round of replacements
+    -- for that priority. This way we don't have to build a new automaton after
+    -- every round of replacements.
+    prependMatch
+      :: Priority -> Text -> (Priority, [Match]) -> Aho.Match Payload -> Aho.Next (Priority, [Match])
+    {-# INLINE prependMatch #-}
+    prependMatch !threshold haystack (!pBest, !matches) (Aho.Match pos (Payload pMatch len replacement))
+      | pMatch < threshold && pMatch >  pBest =
+          Aho.Step (pMatch, [makeMatch haystack pos len replacement])
+      | pMatch < threshold && pMatch == pBest =
+          Aho.Step (pMatch, makeMatch haystack pos len replacement : matches)
+      | otherwise = Aho.Step (pBest, matches)
+
+    -- Pos is the code unit index past the last code unit of the match, we have
+    -- to find the first code unit.
+    makeMatch :: Text -> CodeUnitIndex -> Int -> Replacement -> Match
+    {-# INLINE makeMatch #-}
+    makeMatch = case case_ of
+      -- Case sensitive: length is interpreted as number of bytes
+      CaseSensitive -> \_ pos len replacement ->
+        Match (pos - CodeUnitIndex len) (CodeUnitIndex len) replacement
+      -- Case insensitive: length is interpreted as number of characters
+      IgnoreCase -> \haystack pos len replacement ->
+        -- We start at the last byte of the match, and look backwards.
+        let start = Utf8.skipCodePointsBackwards haystack (pos-1) (len-1) in
+        Match start (pos - start) replacement

@@ -30,6 +30,7 @@ import qualified Data.Aeson as AE
 #endif
 
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Text as Text
 
 import Data.Text.AhoCorasick.Automaton (AcMachine)
 
@@ -94,23 +95,26 @@ splitIgnoreCase = (NonEmpty.reverse .) . splitReverseIgnoreCase
 {-# INLINE splitReverse #-}
 splitReverse :: Splitter -> Text -> NonEmpty Text
 splitReverse s t =
-  finalizeAccum $
-    Aho.runText
-      (zeroAccum (separator s) t)
-      stepAccum
-      (automaton s)
-      t
+  finalizeAccum t $ Aho.runText zeroAccum stepAccum' (automaton s) t
+  where
+    -- Case sensitive matching: separator length is in bytes.
+    sepLength = Utf8.lengthUtf8 (separator s)
+    stepAccum' accum (Aho.Match newFragmentStart _) =
+      stepAccum t accum (newFragmentStart - sepLength) newFragmentStart
+
 
 -- | Like 'splitIgnoreCase', but return the substrings in reverse order.
 {-# INLINE splitReverseIgnoreCase #-}
 splitReverseIgnoreCase :: Splitter -> Text -> NonEmpty Text
 splitReverseIgnoreCase s t =
-  finalizeAccum $
-    Aho.runLower
-      (zeroAccum (separator s) t)
-      stepAccum
-      (automaton s)
-      t
+  finalizeAccum t $ Aho.runLower zeroAccum stepAccum' (automaton s) t
+  where
+    -- Case insensitive matching: separator length is in codepoints.
+    sepLength = Text.length (separator s)
+    stepAccum' accum (Aho.Match newFragmentStart _) =
+      -- We start at the last byte of the separator, and look backwards.
+      let sepStart = Utf8.skipCodePointsBackwards t (newFragmentStart-1) (sepLength-1) in
+      stepAccum t accum sepStart newFragmentStart
 
 --------------------------------------------------------------------------------
 -- Fold
@@ -120,17 +124,17 @@ splitReverseIgnoreCase s t =
 -- have the same length because there is only one needle.
 data Accum =
   Accum
-    { _accumSepLen   :: !Aho.CodeUnitIndex -- ^ Length of separator.
-    , _accumHaystack :: !Text              -- ^ Haystack to slice off of.
-    , accumResult    :: ![Text]            -- ^ Match-separated strings.
-    , accumPrevEnd   :: !Aho.CodeUnitIndex -- ^ Offset at end of last match.
+    { accumResult :: ![Text]
+      -- ^ Match-separated strings.
+    , accumFragmentStart :: !Aho.CodeUnitIndex
+      -- ^ First byte of current fragment (that is the non-separator part)
     }
 
 -- | Finalizing the accumulator does more than just 'accumResult', hence this
 -- is a separate function.
 {-# INLINE finalizeAccum #-}
-finalizeAccum :: Accum -> NonEmpty Text
-finalizeAccum (Accum _ hay res prevEnd) =
+finalizeAccum :: Text -> Accum -> NonEmpty Text
+finalizeAccum hay (Accum res prevEnd) =
   -- Once we have processed all the matches, there is still the substring after
   -- the final match. This substring is always included in the result, even
   -- when there were no matches. Hence we can return a non-empty list.
@@ -139,26 +143,26 @@ finalizeAccum (Accum _ hay res prevEnd) =
 
 -- | The initial accumulator begins at the begin of the haystack.
 {-# INLINE zeroAccum #-}
-zeroAccum :: Text -> Text -> Accum
-zeroAccum sep hay = Accum (Utf8.lengthUtf8 sep) hay [] 0
+zeroAccum :: Accum
+zeroAccum = Accum { accumResult = [], accumFragmentStart = 0 }
 
 -- | Step the accumulator using the next match. Overlapping matches will be
 -- ignored. Overlapping matches may occur when the separator has a non-empty
 -- prefix that is also a suffix.
 {-# INLINE stepAccum #-}
-stepAccum :: Accum -> Aho.Match v -> Aho.Next Accum
-stepAccum acc@(Accum sepLen hay res prevEnd) (Aho.Match sepEnd _)
+stepAccum :: Text -> Accum -> Aho.CodeUnitIndex -> Aho.CodeUnitIndex -> Aho.Next Accum
+stepAccum hay acc@(Accum res fragmentStart) sepStart newFragmentStart
 
   -- When the match begins before the current offset, it overlaps a match that
   -- we processed before, and so we ignore it.
-  | sepEnd - sepLen < prevEnd =
+  | sepStart < fragmentStart =
       Aho.Step acc
 
   -- The match is behind the current offset, so we slice the haystack until the
   -- begin of the match and include that as a result.
   | otherwise =
-      let !str = Utf8.unsafeSliceUtf8 prevEnd (sepEnd - sepLen - prevEnd) hay in
-      Aho.Step acc { accumResult = str : res, accumPrevEnd = sepEnd }
+      let !str = Utf8.unsafeSliceUtf8 fragmentStart (sepStart - fragmentStart) hay in
+      Aho.Step acc { accumResult = str : res, accumFragmentStart = newFragmentStart }
 
 --------------------------------------------------------------------------------
 -- Instances

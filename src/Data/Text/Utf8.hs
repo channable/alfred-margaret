@@ -44,6 +44,7 @@ module Data.Text.Utf8
     , indexCodeUnit
     , unsafeIndexCodePoint
     , unsafeIndexCodeUnit
+    , skipCodePointsBackwards
       -- * Slicing Functions
       --
       -- $slicingFunctions
@@ -249,6 +250,28 @@ indexCodeUnit !text !index
 unsafeIndexCodeUnit :: Text -> CodeUnitIndex -> CodeUnit
 unsafeIndexCodeUnit (Text !u8data !off !_len) !index =
   unsafeIndexCodeUnit' u8data $ CodeUnitIndex off + index
+
+-- | Scan backwards through the text until we've seen the specified number of codepoints. Assumes
+-- that the initial CodeUnitIndex is within a codepoint.
+{-# INLINE skipCodePointsBackwards #-}
+skipCodePointsBackwards :: Text -> CodeUnitIndex -> Int -> CodeUnitIndex
+skipCodePointsBackwards (Text !u8data !off !len) !index0 !n0
+  | index0 >= CodeUnitIndex len = error "Invalid use of skipCodePointsBackwards"
+  | otherwise = loop (index0 + CodeUnitIndex off) n0
+  where
+    loop index n | atTrailingByte index =
+      loop (index-1) n  -- Don't exit before we're at a leading byte
+    loop index 0 | index < 0 =
+      -- We don't prevent reads outside the array, but you do get an error afterwards
+      error "Invalid use of skipCodePointsBackwards"
+    loop index 0 =
+      index - CodeUnitIndex off
+    loop index n =
+      loop (index-1) (n-1)
+
+    -- Second, third and fourth bytes of a codepoint are always 10xxxxxx, while
+    -- the first byte can be 0xxxxxxx or 11yyyyyy.
+    atTrailingByte !index = unsafeIndexCodeUnit' u8data index .&. 0b1100_0000 == 0b1000_0000
 
 -- $slicingFunctions
 --
