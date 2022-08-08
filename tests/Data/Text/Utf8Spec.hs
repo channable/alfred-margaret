@@ -12,7 +12,6 @@ import Test.QuickCheck (Gen, choose, forAllShrink, shrink)
 import qualified Data.Char as Char
 
 import Data.Text.TestInstances ()
-import Data.Text.Utf8.Unlower (refUnlowerCodePoint)
 
 import qualified Data.Text.Utf8 as Utf8
 
@@ -51,20 +50,16 @@ spec = do
     describe "unlowerCodePoint" $ do
 
       it "should return nothing if it's not a lower case of anything" $ do
-        refUnlowerCodePoint 'A' `shouldBe` ""
-        refUnlowerCodePoint 'ẞ' `shouldBe` ""
+        Utf8.unlowerCodePoint 'A' `shouldBe` ""
+        Utf8.unlowerCodePoint 'ẞ' `shouldBe` ""
 
       it "should return itself if it doesn't have any casings" $ do
-        refUnlowerCodePoint '1' `shouldBe` "1"
+        Utf8.unlowerCodePoint '1' `shouldBe` "1"
 
       it "can return multiple values" $ do
-        refUnlowerCodePoint 'a' `shouldBe` "aA"
-        refUnlowerCodePoint 'ß' `shouldBe` "ẞß"
-        refUnlowerCodePoint 'i' `shouldBe` "İiI"
-
-      it "should always equal the reference implementation" $ do
-        forM_ [minBound..maxBound] $ \c ->
-          Utf8.unlowerCodePoint c `shouldBe` refUnlowerCodePoint c
+        Utf8.unlowerCodePoint 'a' `shouldBe` "aA"
+        Utf8.unlowerCodePoint 'ß' `shouldBe` "ẞß"
+        Utf8.unlowerCodePoint 'i' `shouldBe` "İiI"
 
 
     describe "dropWhile" $ do
