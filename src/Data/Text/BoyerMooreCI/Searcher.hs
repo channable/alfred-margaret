@@ -61,7 +61,7 @@ instance Hashable v => Hashable (Searcher v) where
   {-# INLINE hashWithSalt #-}
 
 instance Eq v => Eq (Searcher v) where
-  Searcher xs nx _ == Searcher ys ny _ = (xs, nx) == (ys, ny)
+  Searcher xs nx _ == Searcher ys ny _ = nx == ny && xs == ys
   {-# INLINE (==) #-}
 
 instance NFData v => NFData (Searcher v)

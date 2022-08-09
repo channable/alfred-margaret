@@ -262,7 +262,9 @@ skipCodePointsBackwards (Text !u8data !off !len) !index0 !n0
     loop index n | atTrailingByte index =
       loop (index-1) n  -- Don't exit before we're at a leading byte
     loop index 0 | index < 0 =
-      -- We don't prevent reads outside the array, but you do get an error afterwards
+      -- Throw an error if we've read before the array (e.g. when the data was
+      -- not valid UTF-8), this one-time check doesn't prevent undefined
+      -- behaviour but may help you locate bugs.
       error "Invalid use of skipCodePointsBackwards"
     loop index 0 =
       index - CodeUnitIndex off
@@ -349,10 +351,15 @@ decodeN cu0 cu1 cu2 cu3
 
 
 
+-- | Intermediate state when you're iterating backwards through a Utf8 text.
 data BackwardsIter = BackwardsIter
   { backwardsIterNext :: {-# UNPACK #-} !CodeUnitIndex
+    -- ^ First byte to the left of the codepoint that we're focused on. This can
+    -- be used with 'unsafeIndexEndOfCodePoint'' to find the next codepoint.
   , backwardsIterChar :: {-# UNPACK #-} !CodePoint
+    -- ^ The codepoint that we're focused on
   , backwardsIterEndOfChar :: {-# UNPACK #-} !CodeUnitIndex
+    -- ^ Points to the last byte of the codepoint that we're focused on
   }
 
 -- | Similar to unsafeIndexCodePoint', but assumes that the given index is the

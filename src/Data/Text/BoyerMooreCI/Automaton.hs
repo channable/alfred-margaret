@@ -16,11 +16,10 @@
 -- http://www-igm.univ-mlv.fr/~lecroq/string/node14.html#SECTION00140
 -- https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string-search_algorithm
 --
--- This module contains a almost 1:1 translation from the C example code in the
--- wikipedia article.
+-- This is case insensitive variant of the algorithm which, unlike the case
+-- sensitive variant, has to be aware of the unicode code points that the bytes
+-- represent.
 --
--- The algorithm here can be potentially improved by including the Galil rule
--- (https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string-search_algorithm#The_Galil_rule)
 module Data.Text.BoyerMooreCI.Automaton
     ( Automaton
     , CaseSensitivity (..)
@@ -106,19 +105,8 @@ buildAutomaton pattern_ =
   where
     patternVec = TBA.fromList (Text.unpack pattern_)
 
--- | Finds all matches in the text, calling the match callback with the *first*
--- matched character of each match of the pattern.
---
--- NOTE: This is unlike Aho-Corasick, which reports the index of the character
--- right after a match.
---
--- NOTE: In the UTF-16 version of this module, there is a function 'Data.Text.BoyerMoore.Automaton.runLower'
--- which does lower-case matching. This function does not exist for the UTF-8 version since it is very
--- tricky to skip code points going backwards without preprocessing the whole input first.
---
--- NOTE: To get full advantage of inlining this function, you probably want to
--- compile the compiling module with -fllvm and the same optimization flags as
--- this module.
+-- | Finds all matches in the text, calling the match callback with the first and last byte index of
+-- each match of the pattern.
 runText  :: forall a
   . a
   -> (a -> CodeUnitIndex -> CodeUnitIndex -> Next a)
@@ -253,6 +241,13 @@ minimumSkipForCodePoint cp =
     c | c < 0x10000  -> 3
     _                -> 4
 
+
+-- | Number of bytes of the shortest case variation of the given needle. Needles
+-- are assumed to be lower case.
+--
+--     minimumSkipForVector (TBA.fromList "ab..cd") == 6
+--     minimumSkipForVector (TBA.fromList "aⱥ💩") == 7
+--
 minimumSkipForVector :: TypedByteArray CodePoint -> CodeUnitIndex
 minimumSkipForVector = TBA.foldr (\cp s -> s + minimumSkipForCodePoint cp) 0
 

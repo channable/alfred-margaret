@@ -25,13 +25,19 @@ import qualified Data.List as List
 --
 unlowerCodePoint :: Char -> [Char]
 unlowerCodePoint =
-  \c -> maybe [] id $ HashMap.lookup c completeMapping
+  \c -> maybe [c] id $ HashMap.lookup c unlowerings
+
+-- | This map contains all the unlowerings for which the result is not just a singleton with the
+-- input character. It's marked NOINLINE to make sure that it only gets constructed once.
+unlowerings :: HashMap.HashMap Char [Char]
+{-# NOINLINE unlowerings #-}
+unlowerings =
+  HashMap.filterWithKey isNotId $ List.foldl' (flip addUnlowering) initialMap [minBound..maxBound]
   where
+    initialMap = HashMap.fromList $ zip [minBound..maxBound] (repeat [])
     addUnlowering c hm =
       HashMap.insertWith (++) (Char.toLower c) [c] hm
-    -- This mapping becomes a top level definition and is only evaluated once.
-    completeMapping =
-      List.foldl' (flip addUnlowering) HashMap.empty [minBound..maxBound]
+    isNotId lc ucs = ucs /= [lc]
 
 
 -- | This function prints all the special cases of unlowerCodePoint where it's not @(pure . id)@:
@@ -46,9 +52,6 @@ unlowerCodePoint =
 --     SPECIAL: ǳ (499) -> ǳ (499) ǲ (498) Ǳ (497)
 --     SPECIAL: θ (952) -> ϴ (1012) θ (952) Θ (920)
 --     SPECIAL: ω (969) -> Ω (8486) ω (969) Ω (937)
---     Already uppercase (there is no unlowering): A (65)
---     Already uppercase (there is no unlowering): B (66)
---     Already uppercase (there is no unlowering): C (67)
 --     [..]
 --     Inverse of Char.toUpper: a (97) -> a (97) A (65)
 --     Inverse of Char.toUpper: b (98) -> b (98) B (66)
@@ -67,15 +70,12 @@ printUnlowerings = do
     showCPs :: [Char] -> String
     showCPs cs = List.intercalate " " (map showCP cs)
 
-    charTuple lc = (lc, unlowerCodePoint lc)
-
-    isNotId (lc, ucs) = ucs /= [lc]
     isInverse (lc, ucs) = ucs == [lc, Char.toUpper lc] || ucs == [Char.toUpper lc, lc]
     isAlreadyUppercase (_, ucs) = ucs == []
     isSpecial p = not (isInverse p) && not (isAlreadyUppercase p)
 
     lst :: [(Char, [Char])]
-    lst = filter isNotId $ map charTuple $ [minBound..maxBound]
+    lst = HashMap.toList unlowerings
 
   forM_ (filter isSpecial lst) $ \(lc, ucs) -> do
     putStrLn $ "SPECIAL: " <> showCP lc <> " -> " <> showCPs ucs

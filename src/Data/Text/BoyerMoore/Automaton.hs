@@ -66,7 +66,8 @@ data Next a
 -- of the pattern.
 data Automaton = Automaton
   { automatonPattern :: !Text
-  , automatonPatternHash :: !Int
+  , automatonPatternHash :: !Int  -- ^ Remember our own hash (similar to what 'Hashed' does but our
+                                  -- fields are strict).
   , automatonSuffixTable :: !SuffixTable
   , automatonBadCharTable :: !BadCharTable
   }
@@ -77,7 +78,8 @@ instance Hashable Automaton where
   hashWithSalt salt (Automaton _ patternHash _ _) = hashWithSalt salt patternHash
 
 instance Eq Automaton where
-  (Automaton pat1 _ _ _) == (Automaton pat2 _ _ _) = pat1 == pat2
+  (Automaton pat1 patHash1 _ _) == (Automaton pat2 patHash2 _ _) =
+    patHash1 == patHash2 && pat1 == pat2
 
 #if defined(HAS_AESON)
 instance AE.FromJSON Automaton where

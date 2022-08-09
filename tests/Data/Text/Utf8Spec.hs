@@ -120,6 +120,20 @@ spec = do
         Utf8.skipCodePointsBackwards "💩💩" 6 1 `shouldBe` 0
         Utf8.skipCodePointsBackwards "💩💩" 7 1 `shouldBe` 0
 
+      it "can skip multiple multi-byte codepoint" $ do
+        -- a, İ, ẞ and 💩 have byte lengths 1, 2, 3 and 4
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 15 0 `shouldBe` 15  -- stays at a
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 15 1 `shouldBe` 13  -- skips to İ
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 15 2 `shouldBe` 10  -- skips to ẞ
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 15 3 `shouldBe` 6   -- skips to 💩
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 15 4 `shouldBe` 3   -- skips to ẞ
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 15 5 `shouldBe` 1   -- skips to İ
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 15 6 `shouldBe` 0   -- skips to a
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 14 2 `shouldBe` 6  -- from İ to 💩
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 13 2 `shouldBe` 6  -- from İ to 💩
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 10 3 `shouldBe` 1  -- from ẞ to İ
+        Utf8.skipCodePointsBackwards "aİẞ💩ẞİa" 9 3 `shouldBe` 0   -- from 💩 to a
+
       it "throws errors when you read out of bounds" $ do
         evaluate (Utf8.skipCodePointsBackwards "💩💩" 8 0) `shouldThrow` anyErrorCall
         evaluate (Utf8.skipCodePointsBackwards "💩💩" 7 2) `shouldThrow` anyErrorCall
