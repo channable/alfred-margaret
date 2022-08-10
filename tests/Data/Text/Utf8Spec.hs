@@ -61,6 +61,21 @@ spec = do
         Utf8.unlowerCodePoint 'ß' `shouldBe` "ẞß"
         Utf8.unlowerCodePoint 'i' `shouldBe` "İiI"
 
+    describe "isCaseInvariant" $ do
+      it "holds vacuously for empty texts" $ do
+        Utf8.isCaseInvariant "" `shouldBe` True
+
+      it "should be true for characters without upper/lower cases" $ do
+        Utf8.isCaseInvariant "." `shouldBe` True
+        Utf8.isCaseInvariant ".,;'123" `shouldBe` True
+        Utf8.isCaseInvariant "💩" `shouldBe` True
+
+      it "should be false if there are characters with upper/lower cases" $ do
+        Utf8.isCaseInvariant "a" `shouldBe` False
+        Utf8.isCaseInvariant "A.." `shouldBe` False
+        Utf8.isCaseInvariant "ß." `shouldBe` False
+        Utf8.isCaseInvariant "ẞ" `shouldBe` False
+        Utf8.isCaseInvariant "İ" `shouldBe` False
 
     describe "dropWhile" $ do
 
