@@ -16,15 +16,12 @@ import Test.Hspec (Expectation, Spec, describe, it, parallel, shouldBe)
 import Test.Hspec.Expectations (shouldMatchList, shouldSatisfy)
 import Test.Hspec.QuickCheck (modifyMaxSuccess, prop)
 import Test.QuickCheck (Arbitrary (arbitrary, shrink), forAllShrink, (==>))
-import Test.QuickCheck.Gen (Gen)
 import Test.QuickCheck.Instances ()
 
--- import qualified Data.Text.Internal.Search as TextSearch
 import qualified Test.QuickCheck as QuickCheck
-import qualified Test.QuickCheck.Gen as Gen
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Orphans ()
+import Data.Text.TestInstances (arbitraryNeedleHaystack)
 import Data.Text.Utf8 (Text)
 
 import qualified Data.Text.Utf8 as Text
@@ -67,37 +64,6 @@ naiveMatchPositions needle haystack =
   map toEndPos $ TextSearch.indices needle haystack
   where
     toEndPos index = Utf8.codeUnitIndex (Utf8.lengthUtf8 needle) + index
-
--- | Generate random needles and haystacks, such that the needles have a
--- reasonable probability of occuring in the haystack, which would hardly be the
--- case if we just generated random texts for all of them. We do this by first
--- generating a set of fragments, and then building the haystack and needles by
--- combining these fragments. By doing this, we also get a lot of partial
--- matches, where part of a needle does occur in the haystack, but the full
--- needle does not, and also needles with a shared prefix or suffix. This should
--- fully stress the possible transitions in the automaton.
-arbitraryNeedleHaystack :: Gen (Text, Text)
-arbitraryNeedleHaystack = do
-  let
-    -- Prefer ascii just to have printable test cases, but do include the other
-    -- generator to cover the entire range of code points.
-    genChar = Gen.frequency
-      [ (4, QuickCheck.arbitraryASCIIChar)
-      , (1, QuickCheck.arbitrary)
-      ]
-    genNonEmptyText = do
-      chars <- Gen.listOf1 genChar
-      pure $ Text.pack chars
-
-  fragments <- Gen.listOf1 $ Gen.resize 5 genNonEmptyText
-  let
-    genFragment = Gen.elements $ filter (not . Text.null) fragments
-    genSmall = Gen.scale (`div` 3) $ Gen.listOf1 genFragment
-    genBig = Gen.scale (* 4) $ Gen.listOf1 genFragment
-
-  needle <- fmap Text.concat genSmall
-  haystack <- fmap Text.concat genBig
-  pure (needle, haystack)
 
 spec :: Spec
 spec = parallel $ modifyMaxSuccess (const 200) $ do

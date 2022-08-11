@@ -40,6 +40,7 @@ module Data.Text.AhoCorasick.Automaton
     , runLower
     , runText
     , runWithCase
+    , needleCasings
     ) where
 
 import Control.DeepSeq (NFData)
@@ -59,6 +60,7 @@ import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodePoint, CodeUnitIndex (CodeUnitIndex), Text (..))
 import Data.TypedByteArray (Prim, TypedByteArray)
 
+import qualified Data.Text as Text
 import qualified Data.Text.Utf8 as Utf8
 import qualified Data.TypedByteArray as TBA
 
@@ -545,3 +547,18 @@ runText = runWithCase CaseSensitive
 {-# INLINE runLower #-}
 runLower :: forall a v. a -> (a -> Match v -> Next a) -> AcMachine v -> Text -> a
 runLower = runWithCase IgnoreCase
+
+
+-- | Given a lower case text, this gives all the texts that would lowercase to this one
+--
+--     needleCasings "abc" == ["abc","abC","aBc","aBC","Abc","AbC","ABc","ABC"]
+--     needleCasings "ABC" == []
+--     needleCasings "ω1" == ["Ω1","ω1","Ω1"]
+--
+needleCasings :: Text -> [Text]
+needleCasings = map Text.pack . loop . Text.unpack
+  where
+    loop "" = [""]
+    loop (c:cs) = (:) <$> Utf8.unlowerCodePoint c <*> loop cs
+
+

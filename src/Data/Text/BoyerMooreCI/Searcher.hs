@@ -8,7 +8,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Data.Text.BoyerMoore.Searcher
+module Data.Text.BoyerMooreCI.Searcher
     ( Searcher
     , automata
     , build
@@ -27,9 +27,9 @@ import Data.Hashable (Hashable (hashWithSalt), Hashed, hashed, unhashed)
 import GHC.Generics (Generic)
 
 import Data.Text.Utf8 (Text)
-import Data.Text.BoyerMoore.Automaton (Automaton)
+import Data.Text.BoyerMooreCI.Automaton (Automaton)
 
-import qualified Data.Text.BoyerMoore.Automaton as BoyerMoore
+import qualified Data.Text.BoyerMooreCI.Automaton as BoyerMoore
 
 
 -- | A set of needles with associated values, and Boyer-Moore automata to
@@ -100,7 +100,7 @@ containsAny :: Searcher () -> Text -> Bool
 containsAny !searcher !text =
   let
     -- On the first match, return True immediately.
-    f _acc _match = BoyerMoore.Done True
+    f _acc _matchStart _matchEnd = BoyerMoore.Done True
   in
     any (\(automaton, ()) -> BoyerMoore.runText False f automaton text) (automata searcher)
 -- | Build a 'Searcher' that returns the needle's index in the needle list when it matches.
@@ -116,6 +116,6 @@ containsAll :: Searcher Int -> Text -> Bool
 containsAll !searcher !text =
   let
     -- On the first match, return True immediately.
-    f _acc _match = BoyerMoore.Done True
+    f _acc _matchStart _matchEnd = BoyerMoore.Done True
   in
     all (\(automaton, _) -> BoyerMoore.runText False f automaton text) (automata searcher)

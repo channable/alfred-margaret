@@ -44,6 +44,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Data.Text.CaseSensitivity
                      , Data.Text.Utf8
+                     , Data.Text.Utf8.Unlower
                      , Data.Text.AhoCorasick.Automaton
                      , Data.Text.AhoCorasick.Replacer
                      , Data.Text.AhoCorasick.Searcher
@@ -51,6 +52,9 @@ library
                      , Data.Text.BoyerMoore.Automaton
                      , Data.Text.BoyerMoore.Replacer
                      , Data.Text.BoyerMoore.Searcher
+                     , Data.Text.BoyerMooreCI.Automaton
+                     , Data.Text.BoyerMooreCI.Replacer
+                     , Data.Text.BoyerMooreCI.Searcher
                      , Data.TypedByteArray
   build-depends:
       base             >= 4.7 && < 5
@@ -78,8 +82,9 @@ test-suite test-suite
   main-is:             Main.hs
   other-modules:       Data.Text.AhoCorasickSpec
                      , Data.Text.BoyerMooreSpec
+                     , Data.Text.BoyerMooreCISpec
                      , Data.Text.Utf8Spec
-                     , Data.Text.Orphans
+                     , Data.Text.TestInstances
   hs-source-dirs:      tests
   ghc-options:         -Wall -Wincomplete-record-updates -Wno-orphans
   build-depends:       base >= 4.7 && < 5
@@ -103,6 +108,18 @@ benchmark uvector-vs-tba
                      , vector
                      , deepseq
                      , criterion
+  default-language:    Haskell2010
+
+benchmark bm
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  hs-source-dirs:      bench/bm
+  ghc-options:         -Wall -Wincomplete-record-updates -Wno-orphans
+  build-depends:       base >= 4.7 && < 5
+                     , alfred-margaret
+                     , deepseq
+                     , criterion
+                     , text
   default-language:    Haskell2010
 
 executable dump-automaton

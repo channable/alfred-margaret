@@ -23,7 +23,7 @@ module Data.Text.AhoCorasick.Searcher
     , mapSearcher
     , needles
     , numNeedles
-    , setSearcherCaseSensitivity
+    , setCaseSensitivity
     ) where
 
 import Control.DeepSeq (NFData)
@@ -139,8 +139,8 @@ caseSensitivity = searcherCaseSensitive
 -- | Updates the case sensitivity of the searcher. Does not change the
 -- capitilization of the needles. The caller should be certain that if IgnoreCase
 -- is passed, the needles are already lower case.
-setSearcherCaseSensitivity :: CaseSensitivity -> Searcher v -> Searcher v
-setSearcherCaseSensitivity case_ searcher = searcher{
+setCaseSensitivity :: CaseSensitivity -> Searcher v -> Searcher v
+setCaseSensitivity case_ searcher = searcher{
     searcherCaseSensitive = case_
   }
 

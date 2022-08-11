@@ -36,7 +36,7 @@ import Prelude hiding (length)
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
 import Control.Monad.ST (runST)
-import Data.Hashable (Hashable (..), Hashed, hashed, unhashed)
+import Data.Hashable (Hashable (..))
 import GHC.Generics (Generic)
 
 #if defined(HAS_AESON)
@@ -65,29 +65,33 @@ data Next a
 -- finding @aaaa@ in @aaaaa....aaaaaa@ as for each match it would scan back the whole /m/ characters
 -- of the pattern.
 data Automaton = Automaton
-  { automatonPattern :: Hashed Text
-  , automatonSuffixTable :: SuffixTable
-  , automatonBadCharTable :: BadCharTable
+  { automatonPattern :: !Text
+  , automatonPatternHash :: !Int  -- ^ Remember our own hash (similar to what 'Hashed' does but our
+                                  -- fields are strict).
+  , automatonSuffixTable :: !SuffixTable
+  , automatonBadCharTable :: !BadCharTable
   }
   deriving stock (Generic, Show)
   deriving anyclass (NFData)
 
 instance Hashable Automaton where
-  hashWithSalt salt (Automaton pattern _ _) = hashWithSalt salt pattern
+  hashWithSalt salt (Automaton _ patternHash _ _) = hashWithSalt salt patternHash
 
 instance Eq Automaton where
-  (Automaton pat1 _ _) == (Automaton pat2 _ _) = pat1 == pat2
+  (Automaton pat1 patHash1 _ _) == (Automaton pat2 patHash2 _ _) =
+    patHash1 == patHash2 && pat1 == pat2
 
 #if defined(HAS_AESON)
 instance AE.FromJSON Automaton where
   parseJSON v = buildAutomaton <$> AE.parseJSON v
 
 instance AE.ToJSON Automaton where
-  toJSON = AE.toJSON . unhashed . automatonPattern
+  toJSON = AE.toJSON . automatonPattern
 #endif
 
 buildAutomaton :: Text -> Automaton
-buildAutomaton pattern = Automaton (hashed pattern) (buildSuffixTable pattern) (buildBadCharTable pattern)
+buildAutomaton pattern =
+  Automaton pattern (hash pattern) (buildSuffixTable pattern) (buildBadCharTable pattern)
 
 -- | Finds all matches in the text, calling the match callback with the *first*
 -- matched character of each match of the pattern.
@@ -113,9 +117,8 @@ runText seed f automaton text
   | patLen == 0 = seed
   | otherwise = go seed (patLen - 1)
   where
-    Automaton patternHashed suffixTable badCharTable = automaton
     -- Use needle as identifier since pattern is potentially a keyword
-    needle = unhashed patternHashed
+    Automaton needle _ suffixTable badCharTable = automaton
     patLen = Utf8.lengthUtf8 needle
     stringLen = Utf8.lengthUtf8 text
 
@@ -160,7 +163,7 @@ patternLength = Utf8.lengthUtf8 . patternText
 
 -- | Return the pattern that was used to construct the automaton.
 patternText :: Automaton -> Text
-patternText (Automaton pattern _ _) = unhashed pattern
+patternText = automatonPattern
 
 -- | The suffix table tells us for each character of the pattern how many characters we can
 -- jump ahead if the match fails at that point.

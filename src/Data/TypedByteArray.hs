@@ -12,12 +12,18 @@ module Data.TypedByteArray
     , Prim
     , TypedByteArray
     , fromList
+    , toList
     , generate
     , newTypedByteArray
     , unsafeFreezeTypedByteArray
     , unsafeIndex
     , writeTypedByteArray
+    , null
+    , length
+    , foldr
     ) where
+
+import Prelude hiding (foldr, length, null)
 
 import Control.DeepSeq (NFData (rnf))
 import Control.Monad.Primitive (PrimMonad (PrimState))
@@ -25,9 +31,12 @@ import Control.Monad.ST (runST)
 import Data.Primitive (ByteArray (ByteArray), MutableByteArray, Prim, byteArrayFromList,
                        indexByteArray, newByteArray, sizeOf, unsafeFreezeByteArray, writeByteArray)
 
+import qualified Data.Primitive as Primitive
+
+
 -- | Thin wrapper around 'ByteArray' that makes signatures and indexing nicer to read.
 newtype TypedByteArray a = TypedByteArray ByteArray
-    deriving Show
+    deriving (Show, Eq)
 
 -- | Thin wrapper around 'MutableByteArray s' that makes signatures and indexing nicer to read.
 newtype MutableTypedByteArray a s = MutableTypedByteArray (MutableByteArray s)
@@ -42,6 +51,10 @@ newTypedByteArray = fmap MutableTypedByteArray . newByteArray . (* sizeOf (undef
 {-# INLINE fromList #-}
 fromList :: Prim a => [a] -> TypedByteArray a
 fromList = TypedByteArray . byteArrayFromList
+
+{-# INLINE toList #-}
+toList :: Prim a => TypedByteArray a -> [a]
+toList = foldr (:) []
 
 -- | Element index without bounds checking.
 {-# INLINE unsafeIndex #-}
@@ -81,3 +94,19 @@ intLoop !iStart !n p = go iStart
             | otherwise = do
                 p i
                 go (i + 1)
+
+{-# INLINE null #-}
+null :: TypedByteArray a -> Bool
+null (TypedByteArray arr) =
+  Primitive.sizeofByteArray arr == 0  -- under the assumption that elements are not size 0
+
+{-# INLINE length #-}
+length :: forall a. Prim a => TypedByteArray a -> Int
+length (TypedByteArray arr) =
+  -- This is how foldrByteArray calculates it, so must be good
+  Primitive.sizeofByteArray arr `quot` sizeOf (undefined :: a)
+
+{-# INLINE foldr #-}
+foldr :: Prim a => (a -> b -> b) -> b -> TypedByteArray a -> b
+foldr f a (TypedByteArray arr) = Primitive.foldrByteArray f a arr
+

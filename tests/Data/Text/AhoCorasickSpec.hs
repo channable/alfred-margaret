@@ -4,6 +4,8 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -22,7 +24,7 @@ import qualified Data.Text as T
 import qualified Test.QuickCheck.Gen as Gen
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
-import Data.Text.Orphans ()
+import Data.Text.TestInstances ()
 import Data.Text.Utf8 (Text)
 
 import qualified Data.Text.Utf8 as Text
@@ -64,6 +66,7 @@ spec = do
 
             it "works with characters that are not in ASCII" $ do
                 countMatches Aho.IgnoreCase ["groß", "öffnung", "tür"] "Großfräsmaschinenöffnungstür" `shouldBe` 3
+                countMatches Aho.IgnoreCase ["groß", "öffnung", "tür"] "GROẞFRÄSMASCHINENÖFFNUNGSTÜR" `shouldBe` 3
 
     modifyMaxSize (const 10) $ describe "Replacer" $ do
 
@@ -118,7 +121,12 @@ spec = do
                 replaceIgnoreCase [("éclair", "lightning")] "Éclair" `shouldBe` "lightning"
                 -- Note: U+0319 is an uppercase alpha, which looks exactly like A, but it
                 -- is a different code point.
+                replaceIgnoreCase [("å", "b")] "åÅÅ" `shouldBe` "bbb"
+                replaceIgnoreCase [("k", "m")] "KkK" `shouldBe` "mmm"
+                replaceIgnoreCase [("ǳ", "z")] "ǳǲǱ" `shouldBe` "zzz"
                 replaceIgnoreCase [("bèta", "α"), ("\x0391", "alpha")] "BÈTA" `shouldBe` "alpha"
+                replaceIgnoreCase [("ßèta", "sseta")] "ßèta" `shouldBe` "sseta"
+                replaceIgnoreCase [("ßèta", "sseta")] "ẞÈTA" `shouldBe` "sseta"
 
             it "matches surrogate pairs case-insensitively" $ do
                 -- We can't lowercase a levivating man in business suit, but that should
@@ -178,6 +186,11 @@ spec = do
                     let searcher = Searcher.build Aho.CaseSensitive needles
                     Searcher.containsAny searcher illiad `shouldBe` expectedResult
 
+            it "works with the the first line of the illiad (ignore case)" $ do
+                let illiad = "ἌΝΔΡΑ ΜΟΙ ἜΝΝΕΠΕ, ΜΟΥ͂ΣΑ, ΠΟΛΎΤΡΟΠΟΝ, ὋΣ ΜΆΛΑ ΠΟΛΛᾺ"
+                    searcher = Searcher.build Aho.IgnoreCase ["μοι"]
+                Searcher.containsAny searcher illiad `shouldBe` True
+
         describe "containsAll" $ do
 
             prop "never reports true for empty needles" $ \ (haystack :: Text) ->
@@ -213,12 +226,22 @@ spec = do
                     splitter = Splitter.build separator
 
                 Splitter.split splitter "C++bobobCOBOLbobScala" `shouldBe` "C++" :| ["obCOBOL", "Scala"]
+                Splitter.splitIgnoreCase splitter "C++bobobCOBOLbobScala" `shouldBe` "C++" :| ["obCOBOL", "Scala"]
+                Splitter.splitIgnoreCase splitter "C++BOBOBCOBOLBOBSCALA" `shouldBe` "C++" :| ["OBCOBOL", "SCALA"]
 
             it "neatly splits the first line of the illiad" $ do
                 let splitter = Splitter.build ", "
 
                 Splitter.split splitter "Ἄνδρα μοι ἔννεπε, Μοῦσα, πολύτροπον, ὃς μάλα πολλὰ" `shouldBe`
                     "Ἄνδρα μοι ἔννεπε" :| ["Μοῦσα", "πολύτροπον", "ὃς μάλα πολλὰ"]
+                Splitter.splitIgnoreCase splitter "Ἄνδρα μοι ἔννεπε, Μοῦσα, πολύτροπον, ὃς μάλα πολλὰ" `shouldBe`
+                    "Ἄνδρα μοι ἔννεπε" :| ["Μοῦσα", "πολύτροπον", "ὃς μάλα πολλὰ"]
+
+            it "splits on case insensitive needles" $ do
+                -- The case variations of å have different byte lengths
+                let splitter = Splitter.build "å"
+                Splitter.splitIgnoreCase splitter "aaåbbÅccÅdd" `shouldBe`
+                    "aa" :| ["bb", "cc", "dd"]
 
 -- helpers
 
