@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.1.0.0 - "All The Cases!" (2022-08-31)
+
+- Added a case-insensitive variant of the Boyer-Moore algorithm in the `Data.Text.BoyerMooreCI.*` modules. ([#47](https://github.com/channable/alfred-margaret/pull/47))
+- Fixed a bug in the case-insensitive Aho-Corasick replacer where it would
+  replace the wrong section of the haystack when the needle had a different
+  byte-length than the matching part of the haystack. ([#47](https://github.com/channable/alfred-margaret/pull/47))
+- Allow mapping the payloads of Aho-Corasick automatons. ([#46](https://github.com/channable/alfred-margaret/pull/46))
+
 ## v2.0.0.0 - "So Long Surrogates" (2022-05-02)
 
 Switched to text-2.0 which uses UTF-8 encoding internally.
