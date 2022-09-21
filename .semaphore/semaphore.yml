@@ -25,12 +25,17 @@ blocks:
           # Restore any nix cache that we can find
           - cache restore nix-store-
           # Install Nix
-          - curl -o install-nix https://releases.nixos.org/nix/nix-2.3.15/install
+          - curl -o install-nix-2.10.3 https://releases.nixos.org/nix/nix-2.10.3/install
           - sha256sum --check .semaphore/install-nix.sha256
-          - sh ./install-nix --no-daemon
+
+          - sh ./install-nix-2.10.3 --no-daemon
+          # Enable `nix-command` feature, which `nix build` needs to build
+          - sudo mkdir /etc/nix
+          - echo 'experimental-features = nix-command' | sudo tee -a /etc/nix/nix.conf
+
           - source "$HOME/.nix-profile/etc/profile.d/nix.sh"
           # Configure cachix *without building the environment in default.nix*
-          - nix run -f nix/nixpkgs-pinned.nix cachix -c cachix use channable-public
+          - nix shell -f nix/nixpkgs-pinned.nix cachix -c cachix use channable-public
           # Restore .stack-work and ~/.stack from cache for faster builds
           - cache restore home-stack-$SEMAPHORE_GIT_BRANCH
           - cache restore stack-work-$SEMAPHORE_GIT_BRANCH
@@ -38,7 +43,7 @@ blocks:
       jobs:
         - name: Test alfred-margaret
           commands:
-            - nix run -c stack test alfred-margaret:test-suite
+            - nix shell -f default.nix -c stack test alfred-margaret:test-suite
 
       epilogue:
         commands:
