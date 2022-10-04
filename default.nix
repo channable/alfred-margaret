@@ -8,6 +8,15 @@
 let
   haskellDependencies = import ./nix/haskell-dependencies.nix;
 
+  libacbench = pkgs.rustPlatform.buildRustPackage rec {
+    name = "libacbench";
+    src = ./benchmark/rust-ffi/libacbench;
+    buildType = "release";
+    cargoLock = {
+      lockFile = ./benchmark/rust-ffi/libacbench/Cargo.lock;
+    };
+  };
+
   paths = with pkgs; (
     [
       # Nix tooling
@@ -38,6 +47,7 @@ let
 
       # For rust implementation
       cargo
+      libacbench
 
       # For java implementation (uses outdated bazel stuff)
       jdk8
@@ -45,6 +55,7 @@ let
 
       # For Haskell implementation
       gmp
+
     ]
   );
 in
