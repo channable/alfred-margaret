@@ -11,7 +11,6 @@ let
   paths = with pkgs; (
     [
       # Nix tooling
-      cachix
       niv
       nix-tree
 
