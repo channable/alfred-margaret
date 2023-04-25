@@ -1,12 +1,11 @@
 extern crate aho_corasick;
 extern crate filebuffer;
 extern crate memchr;
-extern crate time;
 
 use std::env;
 use std::io;
 
-use aho_corasick::{Automaton, AcAutomaton, Dense};
+use aho_corasick::{AcAutomaton, Automaton, Dense};
 use filebuffer::FileBuffer;
 use memchr::memchr;
 
@@ -31,12 +30,12 @@ fn process_file(file_name: String) -> io::Result<()> {
             if len % 2 != 0 {
                 // We are looking for the first byte of the 16-bit integer,
                 // not the second one.
-                continue
+                continue;
             }
 
             if let Some(0x00) = file.get(start + len + 1) {
                 // The second byte is as expected, this really was a newline.
-                break
+                break;
             }
 
             // Skip over the 0x0a that is not a newline on the next memchr.
@@ -46,7 +45,7 @@ fn process_file(file_name: String) -> io::Result<()> {
         // A blank line ends the needle section of the file, what follows is
         // haystack.
         if len == 0 {
-            break
+            break;
         }
 
         // The newline byte is not part of the needle.
@@ -61,7 +60,7 @@ fn process_file(file_name: String) -> io::Result<()> {
 
     // Run the benchmark 5 times.
     for i in 0..5 {
-        let epoch = time::PreciseTime::now();
+        let epoch = std::time::Instant::now();
         // NOTE: You can opt for aho_corasick::Dense or Sparse. Dense is more memory
         // efficient and Sparse is faster according to the docs, however, in my
         // measurements, Dense is faster. You can also leave off the .into_full()
@@ -72,10 +71,10 @@ fn process_file(file_name: String) -> io::Result<()> {
         let automaton = AcAutomaton::<_, Dense>::with_transitions(&needles[..]);
         let num_matches = automaton.find_overlapping(haystack).count();
 
-        let duration = epoch.to(time::PreciseTime::now());
+        let duration = epoch.elapsed();
 
         // Print duration in nanoseconds, tab separated.
-        print!("{}\t", duration.num_nanoseconds().unwrap());
+        print!("{}\t", duration.as_nanos());
 
         // In the first iteration, print the match count to stderr, so we can
         // verify it against the reference implementation for correctness.
