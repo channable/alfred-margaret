@@ -3,7 +3,7 @@ name: "Semaphore pipeline for alfred-margaret"
 
 agent:
   machine:
-    type: e1-standard-2
+    type: f1-standard-2
     os_image: ubuntu2004
 
 # Automatically cancel jobs that are already running for all branches but master
