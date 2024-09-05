@@ -21,7 +21,7 @@ let
       (ghc966Packages.ghcWithPackages haskellDependencies)
 
       # Other
-      llvm_9
+      llvm_13
     ] ++
     # We don't use the overlay here because the tooling doesn't need it.
     # The advantage of doing so is that these packages are already available in a global cache.

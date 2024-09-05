@@ -16,7 +16,7 @@ in
     name = "alfred-margaret";
     ghc = pkgs.ghc966Packages.ghcWithPackages haskellDependencies;
     buildInputs = with pkgs; [
-      llvm_9
+      llvm_13
       zlib
       libacbench
     ];
