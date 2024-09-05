@@ -21,6 +21,8 @@ tested-with:
                    , GHC == 8.10.7
                      -- Nixpkgs unstable (Updated 2022-04-14)
                    , GHC == 9.0.2
+                     -- Nixpkgs unstable (Updated 2024-09-05)
+                   , GHC == 9.6.6
 
 source-repository head
   type:     git
