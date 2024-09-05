@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.1.0.1 - "Higher bounds!" (2024-09-05)
+
+Tested on GHC 9.6.6.
+
+- Revise dependency bounds ([#62](https://github.com/channable/alfred-margaret/issues/62) thanks @Bodigrim)
+- Allow using primitive < 0.9 and vector < 0.14 ([#59](https://github.com/channable/alfred-margaret/pull/59) thanks @rampion)
+
 ## v2.1.0.0 - "All The Cases!" (2022-08-31)
 
 - Added a case-insensitive variant of the Boyer-Moore algorithm in the `Data.Text.BoyerMooreCI.*` modules. ([#47](https://github.com/channable/alfred-margaret/pull/47))
