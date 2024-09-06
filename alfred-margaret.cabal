@@ -1,5 +1,5 @@
 name:                alfred-margaret
-version:             2.1.0.0
+version:             2.1.0.2
 synopsis:            Fast Aho-Corasick string searching
 description:         An efficient implementation of the Aho-Corasick
                      string searching algorithm.

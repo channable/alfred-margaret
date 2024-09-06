@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.1.0.2 - "All the bounds!" (2024-09-06)
+
+Publishing requires `cabal` to know the version bounds as well.
+
 ## v2.1.0.1 - "Higher bounds!" (2024-09-05)
 
 Tested on GHC 9.6.6.
