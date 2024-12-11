@@ -1,5 +1,8 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Main where
 
+import GHC.Generics (Generic)
 import Control.DeepSeq (force)
 import Control.Exception (evaluate)
 import Control.Monad (void, when)
@@ -29,6 +32,7 @@ foreign import ccall unsafe "perform_ac"
 -- The pointer should always point to pinned memory.
 -- Use 'fromText' for constructing 'U8Slice's to ensure this.
 data U8Slice = U8Slice (Ptr Word8) CSize CSize
+  deriving Generic
 
 instance Storable U8Slice where
   sizeOf _ = sizeOf (undefined :: Ptr Word8) + 2 * sizeOf (undefined :: CSize)

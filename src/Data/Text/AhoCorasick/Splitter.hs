@@ -4,6 +4,8 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
+{-# LANGUAGE GHC2021 #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 
@@ -19,6 +21,7 @@ module Data.Text.AhoCorasick.Splitter
     , splitReverseIgnoreCase
     ) where
 
+import GHC.Generics (Generic)
 import Control.DeepSeq (NFData (..))
 import Data.Function (on)
 import Data.Hashable (Hashable (..))
@@ -46,6 +49,7 @@ data Splitter =
     { splitterAutomaton :: AcMachine () -- INVARIANT: Exactly one needle.
     , splitterSeparator :: Text         -- INVARIANT: Equivalent to needle.
     }
+  deriving Generic
 
 #if defined(HAS_AESON)
 instance AE.ToJSON Splitter where
@@ -129,6 +133,7 @@ data Accum =
     , accumFragmentStart :: !Aho.CodeUnitIndex
       -- ^ First byte of current fragment (that is the non-separator part)
     }
+  deriving Generic
 
 -- | Finalizing the accumulator does more than just 'accumResult', hence this
 -- is a separate function.

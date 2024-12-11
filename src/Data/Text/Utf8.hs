@@ -361,6 +361,7 @@ data BackwardsIter = BackwardsIter
   , backwardsIterEndOfChar :: {-# UNPACK #-} !CodeUnitIndex
     -- ^ Points to the last byte of the codepoint that we're focused on
   }
+  deriving Generic
 
 -- | Similar to unsafeIndexCodePoint', but assumes that the given index is the
 -- end of a utf8 codepoint. It returns the decoded code point and the index
