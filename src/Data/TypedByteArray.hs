@@ -3,6 +3,7 @@
 --
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
+{-# LANGUAGE GHC2021 #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -25,6 +26,7 @@ module Data.TypedByteArray
 
 import Prelude hiding (foldr, length, null)
 
+import GHC.Generics (Generic)
 import Control.DeepSeq (NFData (rnf))
 import Control.Monad.Primitive (PrimMonad (PrimState))
 import Control.Monad.ST (runST)
@@ -33,10 +35,9 @@ import Data.Primitive (ByteArray (ByteArray), MutableByteArray, Prim, byteArrayF
 
 import qualified Data.Primitive as Primitive
 
-
 -- | Thin wrapper around 'ByteArray' that makes signatures and indexing nicer to read.
 newtype TypedByteArray a = TypedByteArray ByteArray
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic)
 
 -- | Thin wrapper around 'MutableByteArray s' that makes signatures and indexing nicer to read.
 newtype MutableTypedByteArray a s = MutableTypedByteArray (MutableByteArray s)
@@ -109,4 +110,3 @@ length (TypedByteArray arr) =
 {-# INLINE foldr #-}
 foldr :: Prim a => (a -> b -> b) -> b -> TypedByteArray a -> b
 foldr f a (TypedByteArray arr) = Primitive.foldrByteArray f a arr
-
