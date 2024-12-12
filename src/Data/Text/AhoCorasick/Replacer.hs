@@ -156,7 +156,7 @@ setCaseSensitivity case_ (Replacer searcher) =
 -- A match collected while running replacements. It is isomorphic to the Match
 -- reported by the automaton, but the data is arranged in a more useful way:
 -- as the start index and length of the match, and the replacement.
-data Match = Match !CodeUnitIndex !CodeUnitIndex !Text deriving (Eq, Ord, Show)
+data Match = Match !CodeUnitIndex !CodeUnitIndex !Text deriving (Eq, Ord, Show, Generic)
 
 -- | Apply replacements of all matches. Assumes that the matches are ordered by
 -- match position, and that no matches overlap.

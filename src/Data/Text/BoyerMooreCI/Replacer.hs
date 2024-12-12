@@ -4,6 +4,8 @@
 -- Licensed under the 3-clause BSD license, see the LICENSE file in the
 -- repository root.
 
+{-# LANGUAGE GHC2021 #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -12,6 +14,7 @@ module Data.Text.BoyerMooreCI.Replacer
       replaceSingleLimited
     ) where
 
+import GHC.Generics (Generic)
 import Data.Text.Utf8 (Text)
 import Data.Text.BoyerMooreCI.Automaton (Automaton, CodeUnitIndex)
 
@@ -87,3 +90,4 @@ data ReplaceState = ReplaceState
   , rsLength :: !CodeUnitIndex
     -- ^ Length of the newly build string so far, measured in CodeUnits
   }
+  deriving Generic
