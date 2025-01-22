@@ -37,6 +37,15 @@ import Control.DeepSeq (NFData)
 import Control.Monad (when)
 import Control.Monad.ST (runST)
 import Data.Hashable (Hashable (..))
+import Data.Primitive.Extended
+  ( Prim
+  , PrimArray
+  , indexPrimArray
+  , newPrimArray
+  , replicateMutablePrimArray
+  , unsafeFreezePrimArray
+  , writePrimArray
+  )
 import GHC.Generics (Generic)
 
 #if defined(HAS_AESON)
@@ -45,10 +54,8 @@ import qualified Data.Aeson as AE
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodeUnit, CodeUnitIndex (..), Text)
-import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.TypedByteArray as TBA
 
 data Next a
   = Done !a
@@ -167,7 +174,7 @@ patternText = automatonPattern
 
 -- | The suffix table tells us for each character of the pattern how many characters we can
 -- jump ahead if the match fails at that point.
-newtype SuffixTable = SuffixTable (TypedByteArray Int)
+newtype SuffixTable = SuffixTable (PrimArray Int)
   deriving stock (Generic, Show)
   deriving anyclass (NFData)
 
@@ -180,7 +187,7 @@ buildSuffixTable :: Text -> SuffixTable
 buildSuffixTable pattern = runST $ do
   let patLen = Utf8.lengthUtf8 pattern
 
-  table <- TBA.newTypedByteArray $ codeUnitIndex patLen
+  table <- newPrimArray $ codeUnitIndex patLen
 
   let
     -- Case 1: For each position of the pattern we record the shift that would align the pattern so
@@ -206,7 +213,7 @@ buildSuffixTable pattern = runST $ do
           prefixIndex
             | isPrefix pattern (p + 1) = p + 1
             | otherwise = lastPrefixIndex
-        TBA.writeTypedByteArray table (codeUnitIndex p) (codeUnitIndex $ prefixIndex + patLen - 1 - p)
+        writePrimArray table (codeUnitIndex p) (codeUnitIndex $ prefixIndex + patLen - 1 - p)
         init1 prefixIndex (p - 1)
       | otherwise = pure ()
 
@@ -219,21 +226,21 @@ buildSuffixTable pattern = runST $ do
         let
           suffixLen = suffixLength pattern p
         when (Utf8.unsafeIndexCodeUnit pattern (p - suffixLen) /= Utf8.unsafeIndexCodeUnit pattern (patLen - 1 - suffixLen)) $
-          TBA.writeTypedByteArray table (codeUnitIndex $ patLen - 1 - suffixLen) (codeUnitIndex $ patLen - 1 - p + suffixLen)
+          writePrimArray table (codeUnitIndex $ patLen - 1 - suffixLen) (codeUnitIndex $ patLen - 1 - p + suffixLen)
         init2 (p + 1)
       | otherwise = pure ()
 
   init1 (patLen - 1) (patLen - 1)
   init2 0
 
-  SuffixTable <$> TBA.unsafeFreezeTypedByteArray table
+  SuffixTable <$> unsafeFreezePrimArray table
 
 
 -- | The bad char table tells us how far we may skip ahead when encountering a certain character
 -- in the input string. For example, if there's a character that is not contained in the pattern at
 -- all, we can skip ahead until after that character.
 data BadCharTable = BadCharTable
-  { badCharTableEntries :: {-# UNPACK #-} !(TypedByteArray Int)
+  { badCharTableEntries :: {-# UNPACK #-} !(PrimArray Int)
     -- ^ The element type should be CodeUnitIndex, but there's no unboxed vector for that type, and
     -- defining it would be a lot of boilerplate.
   , badCharTablePatternLen :: CodeUnitIndex
@@ -284,7 +291,7 @@ buildBadCharTable pattern = runST $ do
 
   -- Initialize table with the maximum skip distance, which is the length of the pattern.
   -- This applies to all characters that are not part of the pattern.
-  asciiTable <- TBA.replicate badcharTableSize $ codeUnitIndex patLen
+  asciiTable <- replicateMutablePrimArray badcharTableSize $ codeUnitIndex patLen
 
   let
     -- Fill the bad character table based on the rightmost occurrence of a character in the pattern.
@@ -319,13 +326,13 @@ buildBadCharTable pattern = runST $ do
       -- for(i = 0; i < patLen - 1; i++) {
       | i < patLen - 1 = do
         let patChar = Utf8.unsafeIndexCodeUnit pattern i
-        TBA.writeTypedByteArray asciiTable (fromIntegral patChar) (codeUnitIndex $ patLen - 1 - i)
+        writePrimArray asciiTable (fromIntegral patChar) (codeUnitIndex $ patLen - 1 - i)
         fillTable (i + 1)
       | otherwise = pure ()
 
   fillTable 0
 
-  asciiTableFrozen <- TBA.unsafeFreezeTypedByteArray asciiTable
+  asciiTableFrozen <- unsafeFreezePrimArray asciiTable
 
   pure BadCharTable
     { badCharTableEntries = asciiTableFrozen
@@ -336,6 +343,6 @@ buildBadCharTable pattern = runST $ do
 -- Helper functions for easily toggling the safety of this module
 
 -- | Read from a lookup table at the specified index.
-indexTable :: Prim a => TypedByteArray a -> Int -> a
+indexTable :: Prim a => PrimArray a -> Int -> a
 {-# INLINE indexTable #-}
-indexTable = TBA.unsafeIndex
+indexTable = indexPrimArray

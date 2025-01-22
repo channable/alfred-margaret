@@ -48,6 +48,13 @@ import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
 import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
+import Data.Primitive.Extended
+  ( Prim
+  , PrimArray
+  , generatePrimArray
+  , indexPrimArray
+  , primArrayFromList
+  )
 import Data.Word (Word32, Word64)
 import GHC.Generics (Generic)
 
@@ -58,11 +65,9 @@ import qualified Data.Vector as Vector
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (CodePoint, CodeUnitIndex (CodeUnitIndex), Text (..))
-import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Text as Text
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.TypedByteArray as TBA
 
 -- TYPES
 -- | A numbered state in the Aho-Corasick automaton.
@@ -105,14 +110,14 @@ data AcMachine v = AcMachine
   { machineValues               :: !(Vector.Vector [v])
   -- ^ For every state, the values associated with its needles. If the state is
   -- not a match state, the list is empty.
-  , machineTransitions          :: !(TypedByteArray Transition)
+  , machineTransitions          :: !(PrimArray Transition)
   -- ^ A packed vector of transitions. For every state, there is a slice of this
   -- vector that starts at the offset given by `machineOffsets`, and ends at the
   -- first wildcard transition.
-  , machineOffsets              :: !(TypedByteArray Offset)
+  , machineOffsets              :: !(PrimArray Offset)
   -- ^ For every state, the index into `machineTransitions` where the transition
   -- list for that state starts.
-  , machineRootAsciiTransitions :: !(TypedByteArray Transition)
+  , machineRootAsciiTransitions :: !(PrimArray Transition)
   -- ^ A lookup table for transitions from the root state, an optimization to
   -- avoid having to walk all transitions, at the cost of using a bit of
   -- additional memory.
@@ -159,11 +164,11 @@ newWildcardTransition state =
 -- the transitions for a specific state, we also produce a vector of start
 -- indices. All transition lists are terminated by a wildcard transition, so
 -- there is no need to record the length.
-packTransitions :: [[Transition]] -> (TypedByteArray Transition, TypedByteArray Offset)
+packTransitions :: [[Transition]] -> (PrimArray Transition, PrimArray Offset)
 packTransitions transitions =
   let
-    packed = TBA.fromList $ concat transitions
-    offsets = TBA.fromList $ map fromIntegral $ scanl (+) 0 $ fmap List.length transitions
+    packed = primArrayFromList $ concat transitions
+    offsets = primArrayFromList $ map fromIntegral $ scanl (+) 0 $ fmap List.length transitions
   in
     (packed, offsets)
 
@@ -295,8 +300,8 @@ asciiCount = 128
 -- O(1) lookup of a transition, rather than doing a linear scan over all
 -- transitions. The fallback goes back to the initial state, state 0.
 {-# NOINLINE buildAsciiTransitionLookupTable  #-}
-buildAsciiTransitionLookupTable :: IntMap State -> TypedByteArray Transition
-buildAsciiTransitionLookupTable transitions = TBA.generate asciiCount $ \i ->
+buildAsciiTransitionLookupTable :: IntMap State -> PrimArray Transition
+buildAsciiTransitionLookupTable transitions = generatePrimArray asciiCount $ \i ->
   case IntMap.lookup i transitions of
     Just state -> newTransition (Char.chr i) state
     Nothing    -> newWildcardTransition 0
@@ -384,8 +389,8 @@ at :: forall a. Vector.Vector a -> Int -> a
 at = Vector.unsafeIndex
 
 {-# INLINE uAt #-}
-uAt :: Prim a => TypedByteArray a -> Int -> a
-uAt = TBA.unsafeIndex
+uAt :: Prim a => PrimArray a -> Int -> a
+uAt = indexPrimArray
 
 -- RUNNING THE MACHINE
 
@@ -560,5 +565,3 @@ needleCasings = map Text.pack . loop . Text.unpack
   where
     loop "" = [""]
     loop (c:cs) = (:) <$> Utf8.unlowerCodePoint c <*> loop cs
-
-

@@ -57,7 +57,7 @@ library
                      , Data.Text.BoyerMooreCI.Automaton
                      , Data.Text.BoyerMooreCI.Replacer
                      , Data.Text.BoyerMooreCI.Searcher
-                     , Data.TypedByteArray
+  other-modules:       Data.Primitive.Extended
   build-depends:
       base             >= 4.7 && < 5
     , containers       >= 0.6 && < 0.8

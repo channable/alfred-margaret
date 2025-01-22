@@ -37,6 +37,19 @@ module Data.Text.BoyerMooreCI.Automaton
 import Control.DeepSeq (NFData)
 import Control.Monad.ST (runST)
 import Data.Hashable (Hashable (..))
+import Data.Primitive.Extended
+  ( Prim
+  , PrimArray
+  , foldrPrimArray
+  , indexPrimArray
+  , newPrimArray
+  , primArrayFromList
+  , primArrayToList
+  , replicateMutablePrimArray
+  , sizeofPrimArray
+  , unsafeFreezePrimArray
+  , writePrimArray
+  )
 import Data.Text.Internal (Text (..))
 import GHC.Generics (Generic)
 
@@ -46,13 +59,11 @@ import qualified Data.Aeson as AE
 
 import Data.Text.CaseSensitivity (CaseSensitivity (..))
 import Data.Text.Utf8 (BackwardsIter (..), CodePoint, CodeUnitIndex (..))
-import Data.TypedByteArray (Prim, TypedByteArray)
 
 import qualified Data.Char as Char
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as Text
 import qualified Data.Text.Utf8 as Utf8
-import qualified Data.TypedByteArray as TBA
 
 data Next a
   = Done !a
@@ -70,7 +81,7 @@ data Next a
 -- finding @aaaa@ in @aaaaa....aaaaaa@ as for each match it would scan back the whole /m/ characters
 -- of the pattern.
 data Automaton = Automaton
-  { automatonPattern :: !(TypedByteArray CodePoint)
+  { automatonPattern :: !(PrimArray CodePoint)
   , automatonPatternHash :: !Int
   , automatonSuffixTable :: !SuffixTable
   , automatonBadCharLookup :: !BadCharLookup
@@ -103,7 +114,7 @@ buildAutomaton pattern_ =
     , automatonMinPatternSkip = minimumSkipForVector patternVec
     }
   where
-    patternVec = TBA.fromList (Text.unpack pattern_)
+    patternVec = primArrayFromList (Text.unpack pattern_)
 
 -- | Finds all matches in the text, calling the match callback with the first and last byte index of
 -- each match of the pattern.
@@ -115,7 +126,7 @@ runText  :: forall a
   -> a
 {-# INLINE runText #-}
 runText seed f automaton !text
-  | TBA.null pattern_ = seed
+  | sizeofPrimArray pattern_ == 0 = seed
   | otherwise = alignPattern seed initialHaystackMin (initialHaystackMin + minPatternSkip - 1)
   where
     Automaton pattern_ _ suffixTable badCharTable minPatternSkip = automaton
@@ -142,7 +153,7 @@ runText seed f automaton !text
       | otherwise =
           let
             !iter = Utf8.unsafeIndexAnywhereInCodePoint' (case text of Text d _ _ -> d) alignmentEnd
-            !patternIndex = TBA.length pattern_ - 1
+            !patternIndex = sizeofPrimArray pattern_ - 1
             -- End of char may be somewhere different than where we started looking
             !alignmentEnd' = backwardsIterEndOfChar iter
           in
@@ -160,7 +171,7 @@ runText seed f automaton !text
       let
         !haystackCodePointLower = Utf8.lowerCodePoint (backwardsIterChar iter)
       in
-        case haystackCodePointLower == TBA.unsafeIndex pattern_ patternIndex of
+        case haystackCodePointLower == indexPrimArray pattern_ patternIndex of
 
           True | patternIndex == 0 ->
             -- We found a complete match (all pattern characters matched)
@@ -214,7 +225,7 @@ patternLength = Utf8.lengthUtf8 . patternText
 
 -- | Return the pattern that was used to construct the automaton, O(n).
 patternText :: Automaton -> Text
-patternText = Text.pack . TBA.toList . automatonPattern
+patternText = Text.pack . primArrayToList . automatonPattern
 
 
 -- | Number of bytes that we can skip in the haystack if we want to skip no more
@@ -248,31 +259,31 @@ minimumSkipForCodePoint cp =
 --     minimumSkipForVector (TBA.fromList "ab..cd") == 6
 --     minimumSkipForVector (TBA.fromList "aⱥ💩") == 7
 --
-minimumSkipForVector :: TypedByteArray CodePoint -> CodeUnitIndex
-minimumSkipForVector = TBA.foldr (\cp s -> s + minimumSkipForCodePoint cp) 0
+minimumSkipForVector :: PrimArray CodePoint -> CodeUnitIndex
+minimumSkipForVector = foldrPrimArray (\cp s -> s + minimumSkipForCodePoint cp) 0
 
 
 -- | The suffix table tells us for each codepoint (not byte!) of the pattern how many bytes (not
 -- codepoints!) we can jump ahead if the match fails at that point.
-newtype SuffixTable = SuffixTable (TypedByteArray CodeUnitIndex)
+newtype SuffixTable = SuffixTable (PrimArray CodeUnitIndex)
   deriving stock (Generic)
   deriving anyclass (NFData)
 
 instance Show SuffixTable where
-  show (SuffixTable table) = "SuffixTable (TBA.toList " <> show (TBA.toList table) <> ")"
+  show (SuffixTable table) = "SuffixTable (TBA.toList " <> show (primArrayToList table) <> ")"
 
 -- | Lookup an entry in the suffix table.
 suffixLookup :: SuffixTable -> Int -> CodeUnitIndex
 {-# INLINE suffixLookup #-}
 suffixLookup (SuffixTable table) = indexTable table
 
-buildSuffixTable :: TypedByteArray CodePoint -> SuffixTable
+buildSuffixTable :: PrimArray CodePoint -> SuffixTable
 buildSuffixTable pattern_ = runST $ do
   let
-    patLen = TBA.length pattern_
+    patLen = sizeofPrimArray pattern_
     wholePatternSkip = minimumSkipForVector pattern_
 
-  table <- TBA.newTypedByteArray patLen
+  table <- newPrimArray patLen
 
   let
     -- Case 1: For each position of the pattern we record the shift that would align the pattern so
@@ -303,7 +314,7 @@ buildSuffixTable pattern_ = runST $ do
                         Nothing -> lastSkipBytes
                         -- Skip the whole pattern _except_ the bytes for the suffix(==prefix)
                         Just nonSkippableBytes -> wholePatternSkip - nonSkippableBytes
-        TBA.writeTypedByteArray table p skipBytes
+        writePrimArray table p skipBytes
         init1 skipBytes (p - 1)
       | otherwise = pure ()
 
@@ -314,30 +325,30 @@ buildSuffixTable pattern_ = runST $ do
     init2 p skipBytes
       | p < patLen - 1 = do
           -- If we find a suffix that ends at p, we can skip everything _after_ p.
-          let skipBytes' = skipBytes - minimumSkipForCodePoint (TBA.unsafeIndex pattern_ p)
+          let skipBytes' = skipBytes - minimumSkipForCodePoint (indexPrimArray pattern_ p)
           case substringIsSuffix pattern_ p of
             Nothing -> pure ()
             Just suffixLen -> do
-              TBA.writeTypedByteArray table (patLen - 1 - suffixLen) skipBytes'
+              writePrimArray table (patLen - 1 - suffixLen) skipBytes'
           init2 (p + 1) skipBytes'
       | otherwise = pure ()
 
   init1 (wholePatternSkip-1) (patLen - 1)
   init2 0 wholePatternSkip
-  TBA.writeTypedByteArray table (patLen - 1) (CodeUnitIndex 1)
+  writePrimArray table (patLen - 1) (CodeUnitIndex 1)
 
-  SuffixTable <$> TBA.unsafeFreezeTypedByteArray table
+  SuffixTable <$> unsafeFreezePrimArray table
 
 -- | True if the suffix of the @pattern@ starting from @pos@ is a prefix of the pattern
 -- For example, @suffixIsPrefix \"aabbaa\" 4 == Just 2@.
-suffixIsPrefix :: TypedByteArray CodePoint -> Int -> Maybe CodeUnitIndex
+suffixIsPrefix :: PrimArray CodePoint -> Int -> Maybe CodeUnitIndex
 suffixIsPrefix pattern_ pos = go 0 (CodeUnitIndex 0)
   where
-    suffixLen = TBA.length pattern_ - pos
+    suffixLen = sizeofPrimArray pattern_ - pos
     go !i !skipBytes
       | i < suffixLen =
-          let prefixChar = TBA.unsafeIndex pattern_ i in
-          if prefixChar == TBA.unsafeIndex pattern_ (pos + i)
+          let prefixChar = indexPrimArray pattern_ i in
+          if prefixChar == indexPrimArray pattern_ (pos + i)
             then go (i + 1) (skipBytes + minimumSkipForCodePoint prefixChar)
             else Nothing
       | otherwise = Just skipBytes
@@ -362,12 +373,12 @@ suffixIsPrefix pattern_ pos = go 0 (CodeUnitIndex 0)
 --   substringIsSuffix (Vector.fromList "abaacaabcbaac") 4 == Just 4  -- baac == baac
 --   substringIsSuffix (Vector.fromList "abaacaabcbaac") 8 == Just 1  -- c == c
 --
-substringIsSuffix :: TypedByteArray CodePoint -> Int -> Maybe Int
+substringIsSuffix :: PrimArray CodePoint -> Int -> Maybe Int
 substringIsSuffix pattern_ pos = go 0
   where
-    patLen = TBA.length pattern_
+    patLen = sizeofPrimArray pattern_
     go i | i > pos = Nothing  -- prefix==suffix, so already covered by suffixIsPrefix
-         | TBA.unsafeIndex pattern_ (pos - i) == TBA.unsafeIndex pattern_ (patLen - 1 - i) =
+         | indexPrimArray pattern_ (pos - i) == indexPrimArray pattern_ (patLen - 1 - i) =
              go (i + 1)
          | i == 0 = Nothing  -- Nothing matched
          | otherwise = Just i
@@ -377,7 +388,7 @@ substringIsSuffix pattern_ pos = go 0
 -- character in the input string. For example, if there's a character that is not contained in the
 -- pattern at all, we can skip ahead until after that character.
 data BadCharLookup = BadCharLookup
-  { badCharLookupTable :: {-# UNPACK #-} !(TypedByteArray CodeUnitIndex)
+  { badCharLookupTable :: {-# UNPACK #-} !(PrimArray CodeUnitIndex)
   , badCharLookupMap :: !(HashMap.HashMap CodePoint CodeUnitIndex)
   , badCharLookupDefault :: !CodeUnitIndex
   }
@@ -400,7 +411,7 @@ badCharLookup (BadCharLookup bclTable bclMap bclDefault) char
 
 
 
-buildBadCharLookup :: TypedByteArray CodePoint -> BadCharLookup
+buildBadCharLookup :: PrimArray CodePoint -> BadCharLookup
 buildBadCharLookup pattern_ = runST $ do
 
   let
@@ -408,7 +419,7 @@ buildBadCharLookup pattern_ = runST $ do
 
   -- Initialize table with the maximum skip distance, which is the length of the pattern.
   -- This applies to all characters that are not part of the pattern.
-  table <- (TBA.replicate badCharTableSize defaultSkip)
+  table <- replicateMutablePrimArray badCharTableSize defaultSkip
 
   let
     -- Fill the bad character table based on the rightmost occurrence of a character in the pattern.
@@ -449,15 +460,15 @@ buildBadCharLookup pattern_ = runST $ do
         let skipBytes' = skipBytes - minimumSkipForCodePoint patChar in
         if fromEnum patChar < badCharTableSize
         then do
-          TBA.writeTypedByteArray table (fromEnum patChar) skipBytes'
+          writePrimArray table (fromEnum patChar) skipBytes'
           fillTable badCharMap skipBytes' patChars
         else
           let badCharMap' = HashMap.insert patChar skipBytes' badCharMap
           in fillTable badCharMap' skipBytes' patChars
 
-  badCharMap <- fillTable HashMap.empty defaultSkip (TBA.toList pattern_)
+  badCharMap <- fillTable HashMap.empty defaultSkip (primArrayToList pattern_)
 
-  tableFrozen <- TBA.unsafeFreezeTypedByteArray table
+  tableFrozen <- unsafeFreezePrimArray table
 
   pure BadCharLookup
     { badCharLookupTable = tableFrozen
@@ -469,6 +480,6 @@ buildBadCharLookup pattern_ = runST $ do
 -- Helper functions for easily toggling the safety of this module
 
 -- | Read from a lookup table at the specified index.
-indexTable :: Prim a => TypedByteArray a -> Int -> a
+indexTable :: Prim a => PrimArray a -> Int -> a
 {-# INLINE indexTable #-}
-indexTable = TBA.unsafeIndex
+indexTable = indexPrimArray
