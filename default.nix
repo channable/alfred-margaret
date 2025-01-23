@@ -6,17 +6,17 @@
   benchTools ? false,
 }:
 let
-  haskellDependencies = import ./nix/haskell-dependencies.nix;
-
   devTools =
     with pkgs;
     [
       # Nix tooling
       niv
       nix-tree
+      nixfmt-rfc-style
 
       # Haskell tooling
       stack
+      cabal-install
 
       # Other
       llvm_13
