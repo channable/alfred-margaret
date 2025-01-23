@@ -18,9 +18,6 @@ let
       # Haskell tooling
       stack
 
-      # Haskell dependencies
-      (ghc966Packages.ghcWithPackages haskellDependencies)
-
       # Other
       llvm_13
     ]
