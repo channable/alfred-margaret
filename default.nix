@@ -8,7 +8,7 @@
 let
   haskellDependencies = import ./nix/haskell-dependencies.nix;
 
-  paths =
+  devTools =
     with pkgs;
     [
       # Nix tooling
@@ -51,7 +51,6 @@ let
       gmp
     ];
 in
-pkgs.buildEnv {
-  name = "alfred-margaret-env";
-  paths = paths;
+pkgs.mkShell {
+  packages = devTools;
 }
