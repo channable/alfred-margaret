@@ -4,7 +4,7 @@ name: "Semaphore pipeline for alfred-margaret"
 agent:
   machine:
     type: f1-standard-2
-    os_image: ubuntu2004
+    os_image: ubuntu2204
 
 # Automatically cancel jobs that are already running for all branches but master
 auto_cancel:
