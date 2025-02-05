@@ -25,10 +25,10 @@ blocks:
           # Restore any nix cache that we can find
           - cache restore nix-store-
           # Install Nix
-          - curl -o install-nix-2.10.3 https://releases.nixos.org/nix/nix-2.10.3/install
+          - curl -o install-nix-2.24.12 https://releases.nixos.org/nix/nix-2.24.12/install
           - sha256sum --check .semaphore/install-nix.sha256
 
-          - sh ./install-nix-2.10.3 --no-daemon
+          - sh ./install-nix-2.24.12 --no-daemon
           # Enable `nix-command` feature, which `nix build` needs to build
           - sudo mkdir /etc/nix
           - echo 'experimental-features = nix-command' | sudo tee -a /etc/nix/nix.conf
