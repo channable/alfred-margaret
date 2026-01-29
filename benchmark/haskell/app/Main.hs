@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -fllvm -O2 -optlo=-O3 -optlo=-tailcallelim #-}
+{-# OPTIONS_GHC -fllvm -O2 -optlo=-passes=default<O3> #-}
 
 -- | Benchmark for our Aho-Corasick implementation.
 module Main where

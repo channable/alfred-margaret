@@ -18,14 +18,14 @@ let
       stack
 
       # Haskell dependencies
-      (ghc966Packages.ghcWithPackages haskellDependencies)
+      (ghc910Packages.ghcWithPackages haskellDependencies)
 
       # Other
-      llvm_13
+      llvm_19
     ] ++
     # We don't use the overlay here because the tooling doesn't need it.
     # The advantage of doing so is that these packages are already available in a global cache.
-    lib.optionals hsTools (with haskell.packages.ghc966; [
+    lib.optionals hsTools (with haskell.packages.ghc910; [
       haskell-language-server
       implicit-hie
     ]) ++

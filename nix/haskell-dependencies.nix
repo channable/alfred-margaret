@@ -10,4 +10,5 @@ haskellPackages:
     hspec
     hspec-expectations
     quickcheck-instances
+    clock
   ]

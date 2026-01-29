@@ -14,9 +14,9 @@ let
 in
   pkgs.haskell.lib.buildStackProject {
     name = "alfred-margaret";
-    ghc = pkgs.ghc966Packages.ghcWithPackages haskellDependencies;
+    ghc = pkgs.ghc910Packages.ghcWithPackages haskellDependencies;
     buildInputs = with pkgs; [
-      llvm_13
+      llvm_19
       zlib
       libacbench
     ];

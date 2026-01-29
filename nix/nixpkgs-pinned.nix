@@ -3,5 +3,5 @@ let
   sources = import ./sources.nix;
 in
   import sources.nixpkgs {
-    overlays = [(import ./ghc966-overlay.nix)] ++ overlays;
+    overlays = [(import ./ghc910-overlay.nix)] ++ overlays;
   }

@@ -76,7 +76,7 @@ library
   cpp-options:         -DHAS_AESON
   }
   if flag(llvm) {
-  ghc-options:         -fllvm -optlo=-O3 -optlo=-tailcallelim
+  ghc-options:         -fllvm -optlo=-passes=default<O3>
   }
 
 test-suite test-suite
