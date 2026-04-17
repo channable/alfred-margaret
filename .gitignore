@@ -1,3 +1,6 @@
+# Direnv cache
+/.direnv/
+
 # Stack build directory.
 /.stack-work/
 
