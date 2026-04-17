@@ -25,6 +25,7 @@ let
 
       # Other
       llvm_19
+      llvmPackages_19.clang
     ] ++
     # We don't use the overlay here because the tooling doesn't need it.
     # The advantage of doing so is that these packages are already available in a global cache.

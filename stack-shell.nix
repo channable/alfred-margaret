@@ -17,6 +17,7 @@ in
     ghc = pkgs.ghc910Packages.ghcWithPackages haskellDependencies;
     buildInputs = with pkgs; [
       llvm_19
+      llvmPackages_19.clang
       zlib
       libacbench
     ];
