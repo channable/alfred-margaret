@@ -11,6 +11,8 @@
 let
   haskellDependencies = import ./nix/haskell-dependencies.nix;
 
+  glibcLocalesMinimal = import ./nix/locale.nix { inherit pkgs; };
+
   paths = with pkgs; (
     [
       # Nix tooling
@@ -58,7 +60,10 @@ let
     };
 
     shell = pkgs.mkShell {
-      buildInputs = paths;
+      buildInputs = paths ++ [ glibcLocalesMinimal ];
+
+      LOCALE_ARCHIVE = "${glibcLocalesMinimal}/lib/locale/locale-archive";
+      LANG = "C.UTF-8";
     };
   };
 in
