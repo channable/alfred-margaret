@@ -3,7 +3,10 @@
   # Use haskell-languager-server?
   hsTools ? false,
   # Use tools for the benchmarks in other languages (Cargo, Bazel, etc.)?
-  benchTools ? false
+  benchTools ? false,
+  # Which environment to build. Use "shell" for direnv/nix-shell, "build-env"
+  # for the legacy buildEnv derivation.
+  environment ? "build-env"
 }:
 let
   haskellDependencies = import ./nix/haskell-dependencies.nix;
@@ -22,6 +25,7 @@ let
 
       # Other
       llvm_19
+      llvmPackages_19.clang
     ] ++
     # We don't use the overlay here because the tooling doesn't need it.
     # The advantage of doing so is that these packages are already available in a global cache.
@@ -46,8 +50,16 @@ let
       gmp
     ]
   );
+
+  environments = {
+    build-env = pkgs.buildEnv {
+      name = "alfred-margaret-env";
+      paths = paths;
+    };
+
+    shell = pkgs.mkShell {
+      buildInputs = paths;
+    };
+  };
 in
-  pkgs.buildEnv {
-    name = "alfred-margaret-env";
-    paths = paths;
-  }
+  environments."${environment}"
