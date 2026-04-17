@@ -1,0 +1,4 @@
+packages: ./*.cabal
+
+repository hackage.haskell.org
+  url: http://hackage.haskell.org/

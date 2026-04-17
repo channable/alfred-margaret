@@ -18,6 +18,7 @@ let
       nix-tree
 
       # Haskell tooling
+      cabal-install
       stack
 
       # Haskell dependencies
