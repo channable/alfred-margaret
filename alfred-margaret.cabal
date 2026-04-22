@@ -60,7 +60,7 @@ library
   other-modules:       Data.Primitive.Extended
   build-depends:
       base             >= 4.7 && < 5
-    , containers       >= 0.6 && < 0.8
+    , containers       >= 0.6 && < 0.9
     , deepseq          >= 1.4 && < 1.6
     , hashable         >= 1.4.0.2 && < 1.6
     , primitive        >= 0.6.4 && < 0.10
