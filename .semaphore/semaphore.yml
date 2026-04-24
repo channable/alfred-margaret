@@ -11,6 +11,14 @@ auto_cancel:
   running:
     when: "branch != 'master'"
 
+# This configuration applies to all blocks.
+global_job_config:
+  # List secrets that are to be available in all jobs.
+  # Secrets can be created using the web interface, or by using the `sem` tool.
+  secrets:
+    # Keys needed to access our cachix cache.
+    - name: "cachix-channable-public"
+
 blocks:
   - name: Stack
     task:
@@ -50,6 +58,9 @@ blocks:
           # Fill caches
           - cache store home-stack-$SEMAPHORE_GIT_BRANCH ~/.stack
           - cache store stack-work-$SEMAPHORE_GIT_BRANCH .stack-work
+          # Push the Nix environment and all of its requisites to the
+          # `channable-public` Cachix cache.
+          - nix shell -f nix/nixpkgs-pinned.nix cachix -c ./.semaphore/push-to-cachix.sh
           # Store a copy of the nix store. This will be refreshed daily, which
           # is more than sufficient for this repo. Semaphore's cache is faster
           # than Cachix.

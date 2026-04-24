@@ -18,6 +18,7 @@ let
       # Nix tooling
       niv
       nix-tree
+      cachix
 
       # Haskell tooling
       stack
