@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.1.1.0 - "Generically Primitive" (2026-04-24)
+
+Tested on GHC 9.14.1.
+
+- Derive `Generic` for the exposed data types in `Data.Text.AhoCorasick.*`,
+  `Data.Text.BoyerMoore.*`, `Data.Text.BoyerMooreCI.*` and
+  `Data.Text.CaseSensitivity` ([#65](https://github.com/channable/alfred-margaret/pull/65)).
+- Replace the internal `Data.TypedByteArray` wrapper with `PrimArray` from
+  `Data.Primitive`; introduces the new internal module `Data.Primitive.Extended`.
+- Widen `containers` upper bound to include `0.8`.
+- Toolchain: switch development environment and CI to GHC 9.14 and LLVM 19;
+  add `direnv` support; bump pinned `nixpkgs` and Nix to 2.24.12.
+- Update `tested-with` to GHC 9.14.1.
+
 ## v2.1.0.2 - "All the bounds!" (2024-09-06)
 
 Publishing requires `cabal` to know the version bounds as well.

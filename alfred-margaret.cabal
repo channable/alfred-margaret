@@ -1,5 +1,5 @@
 name:                alfred-margaret
-version:             2.1.0.2
+version:             2.1.1.0
 synopsis:            Fast Aho-Corasick string searching
 description:         An efficient implementation of the Aho-Corasick
                      string searching algorithm.
@@ -12,6 +12,7 @@ copyright:           2020 Channable
 category:            Data, Text
 build-type:          Simple
 extra-source-files:  README.md
+                   , CHANGELOG.md
                    , performance.png
 cabal-version:       >=1.10
 tested-with:
@@ -23,6 +24,8 @@ tested-with:
                    , GHC == 9.0.2
                      -- Nixpkgs unstable (Updated 2024-09-05)
                    , GHC == 9.6.6
+                     -- Nixpkgs unstable (Updated 2026-04-22)
+                   , GHC == 9.14.1
 
 source-repository head
   type:     git
