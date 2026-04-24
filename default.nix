@@ -1,5 +1,8 @@
 {
-  pkgs ? import ./nix/nixpkgs-pinned.nix {},
+  # GHC version to use. Must be an attribute name available in
+  # `pkgs.haskell.packages`, e.g. "ghc96", "ghc98", "ghc910", "ghc912", "ghc914".
+  ghcVersion ? "ghc914",
+  pkgs ? import ./nix/nixpkgs-pinned.nix { inherit ghcVersion; },
   # Use haskell-languager-server?
   hsTools ? false,
   # Use tools for the benchmarks in other languages (Cargo, Bazel, etc.)?
@@ -22,9 +25,10 @@ let
 
       # Haskell tooling
       stack
+      cabal-install
 
       # Haskell dependencies
-      (ghc914Packages.ghcWithPackages haskellDependencies)
+      (channableHaskellPackages.ghcWithPackages haskellDependencies)
 
       # Other
       llvm_19
@@ -32,7 +36,7 @@ let
     ] ++
     # We don't use the overlay here because the tooling doesn't need it.
     # The advantage of doing so is that these packages are already available in a global cache.
-    lib.optionals hsTools (with haskell.packages.ghc914; [
+    lib.optionals hsTools (with haskell.packages.${ghcVersion}; [
       haskell-language-server
       implicit-hie
     ]) ++

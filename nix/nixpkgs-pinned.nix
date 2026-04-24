@@ -1,7 +1,7 @@
-{ overlays ? [] }:
+{ overlays ? [], ghcVersion ? "ghc914" }:
 let
   sources = import ./sources.nix;
 in
   import sources.nixpkgs {
-    overlays = [(import ./ghc914-overlay.nix)] ++ overlays;
+    overlays = [(import ./ghc-overlay.nix ghcVersion)] ++ overlays;
   }

@@ -1,6 +1,6 @@
-{}:
+{ ghcVersion ? "ghc914" }:
 let
-  pkgs = import ./nix/nixpkgs-pinned.nix {};
+  pkgs = import ./nix/nixpkgs-pinned.nix { inherit ghcVersion; };
   haskellDependencies = import ./nix/haskell-dependencies.nix;
 
   glibcLocalesMinimal = import ./nix/locale.nix { inherit pkgs; };
@@ -17,7 +17,8 @@ in
   pkgs.mkShell {
     name = "alfred-margaret";
     buildInputs = [
-      (pkgs.ghc914Packages.ghcWithPackages haskellDependencies)
+      (pkgs.channableHaskellPackages.ghcWithPackages haskellDependencies)
+      pkgs.cabal-install
       pkgs.llvm_19
       pkgs.llvmPackages_19.clang
       pkgs.zlib
