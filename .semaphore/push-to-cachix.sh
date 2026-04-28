@@ -11,9 +11,16 @@
 set -euo pipefail
 
 # 1. Build both environments (no GC root) and capture their output paths.
+#    When `GHC_VERSION` is set (e.g. by the Cabal matrix block in CI), also
+#    build the `shell` environment for that specific GHC version so that
+#    matrix builds populate the cache too.
 outputs=$(
   nix build -f default.nix --no-link --print-out-paths --argstr environment build-env
   nix build -f default.nix --no-link --print-out-paths --argstr environment shell
+  if [[ -n "${GHC_VERSION:-}" ]]; then
+    nix build -f default.nix --no-link --print-out-paths --argstr environment build-env --argstr ghcVersion "$GHC_VERSION"
+    nix build -f default.nix --no-link --print-out-paths --argstr environment shell --argstr ghcVersion "$GHC_VERSION"
+  fi
 )
 
 # 2. Push all paths to cachix.

@@ -95,4 +95,7 @@ blocks:
 
       epilogue:
         commands:
+          # Push the Nix environment and all of its requisites to the
+          # `channable-public` Cachix cache.
+          - nix shell -f nix/nixpkgs-pinned.nix cachix -c ./.semaphore/push-to-cachix.sh
           - "cache store nix-store-$GHC_VERSION-$(date -u -Idate) /nix"
