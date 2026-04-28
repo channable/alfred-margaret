@@ -46,6 +46,7 @@ module Data.Text.AhoCorasick.Automaton
 import Control.DeepSeq (NFData)
 import Data.Bits (Bits (shiftL, shiftR, (.&.), (.|.)))
 import Data.Char (chr)
+import Data.Foldable (foldl')
 import Data.IntMap.Strict (IntMap)
 import Data.Primitive.Extended
   ( Prim
