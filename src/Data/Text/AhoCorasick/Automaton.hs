@@ -289,7 +289,7 @@ buildTransitionMap =
     initialTransitions = IntMap.singleton stateInitial IntMap.empty
     initialValues = IntMap.empty
   in
-    foldl' insertNeedle (1, initialTransitions, initialValues)
+    List.foldl' insertNeedle (1, initialTransitions, initialValues)
 
 -- Size of the ascii transition lookup table.
 asciiCount :: Integral a => a
