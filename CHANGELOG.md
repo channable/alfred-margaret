@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.1.1.1 - "Matrix Reloaded" (2026-05-08)
+
+Tested on GHC 9.6, 9.8, 9.10, 9.12, and 9.14.
+
+- Fix build on GHC 9.6 by replacing `Data.List.foldl'` import via `Prelude`
+  with an explicit `List.foldl'` qualified import
+  ([#77](https://github.com/channable/alfred-margaret/pull/77)).
+- CI now tests against a matrix of GHC 9.6, 9.8, 9.10, 9.12 and 9.14 to
+  prevent future regressions.
+- Nix: allow selecting the GHC version used by the development environment.
+
 ## v2.1.1.0 - "Generically Primitive" (2026-04-24)
 
 Tested on GHC 9.14.1.

@@ -1,5 +1,5 @@
 name:                alfred-margaret
-version:             2.1.1.0
+version:             2.1.1.1
 synopsis:            Fast Aho-Corasick string searching
 description:         An efficient implementation of the Aho-Corasick
                      string searching algorithm.
@@ -25,7 +25,11 @@ tested-with:
                      -- Nixpkgs unstable (Updated 2024-09-05)
                    , GHC == 9.6.6
                      -- Nixpkgs unstable (Updated 2026-04-22)
-                   , GHC == 9.14.1
+                   , GHC == 9.6.*
+                   , GHC == 9.8.*
+                   , GHC == 9.10.*
+                   , GHC == 9.12.*
+                   , GHC == 9.14.*
 
 source-repository head
   type:     git
