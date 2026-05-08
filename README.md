@@ -1,11 +1,11 @@
 # Alfred–Margaret
 
 Alfred–Margaret is a fast implementation of the Aho–Corasick string
-searching algorithm in Haskell. It powers many string-related operations
+searching algorithm in Haskell. It powered many string-related operations
 in [Channable][channable].
 
 The library is designed to work with the [`text`][text] package. It matches
-directly on the internal UTF-16 representation of `Text` for efficiency. See the
+directly on the internal UTF-8 representation of `Text` for efficiency. See the
 [announcement blog post][blog-post] for a deeper dive into Aho–Corasick, and the
 optimizations that make this library fast.
 
@@ -17,13 +17,7 @@ Running time to count all matches, in a real-world data set,
 comparing [a Java implementation][hankcs] and [a Rust implementation][burntsushi]
 against Alfred–Margaret, and against memcopy to establish a lower bound:
 
-<p align="center">
-<img
-  title="Graph that shows that Alfred–Margaret is fast."
-  src="performance.png"
-  width="80%"
->
-</p>
+![Graph that shows that Alfred–Margaret is fast.](performance.png)
 
 For the full details of this benchmark, see
 [our announcement blog post][blog-post], which includes more details about the

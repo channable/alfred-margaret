@@ -7,7 +7,7 @@ homepage:            https://github.com/channable/alfred-margaret
 license:             BSD3
 license-file:        LICENSE
 author:              The Alfred-Margaret authors
-maintainer:          Ruud van Asseldonk <ruud@channable.com>, Fabian Thorand <fabian@channable.com>
+maintainer:          Reinier Maas <reinier.maas@channable.com>, Fabian Thorand <fabian@channable.com>
 copyright:           2020 Channable
 category:            Data, Text
 build-type:          Simple
